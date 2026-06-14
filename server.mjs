@@ -1443,7 +1443,7 @@ async function runPairing(jobId) {
       });
       sendNtfyNotification(
         'TV Paired Successfully',
-        `TV Code: ${code}\nDevice: ${deviceName}\n\nSuccessfully paired with Suka immediately from validation response.`,
+        `TV Code: ${code}\nDevice: ${deviceName}\n\nSuccessfully paired with Sooka immediately from validation response.`,
         'tada,tv'
       );
       return;

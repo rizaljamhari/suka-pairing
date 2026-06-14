@@ -13,7 +13,7 @@ import { Textarea } from './components/ui/textarea';
 const timelineSteps = [
   { key: 'queued', label: 'We received the TV code.' },
   { key: 'validating', label: 'We are checking the code format.' },
-  { key: 'submitting_code', label: 'We are sending the code to Suka.' },
+  { key: 'submitting_code', label: 'We are sending the code to Sooka.' },
   { key: 'paired', label: 'We are waiting for the TV to confirm.' },
 ];
 
@@ -780,12 +780,12 @@ function PortalPage() {
   async function saveSession(event) {
     event.preventDefault();
     if (!loginResponse.trim()) {
-      setActivityLog('Paste the Suka login JSON before saving the session.');
+      setActivityLog('Paste the Sooka login JSON before saving the session.');
       return;
     }
 
     setSessionBusy(true);
-    setActivityLog('Saving the Suka session...');
+    setActivityLog('Saving the Sooka session...');
     try {
       const payload = await apiJson('/api/bootstrap/session', {
         method: 'POST',
@@ -811,7 +811,7 @@ function PortalPage() {
 
   async function verifySession() {
     setSessionBusy(true);
-    setActivityLog('Checking the current Suka session...');
+    setActivityLog('Checking the current Sooka session...');
     try {
       const payload = await apiJson('/api/bootstrap/verify', { method: 'POST' });
       setSession(payload.session || null);
@@ -851,14 +851,14 @@ function PortalPage() {
 
   async function clearSession() {
     setSessionBusy(true);
-    setActivityLog('Clearing the saved Suka session...');
+    setActivityLog('Clearing the saved Sooka session...');
     try {
       const payload = await apiJson('/api/bootstrap/clear', { method: 'POST' });
       setLoginResponse('');
       setRequestHeaders('');
       setSession(payload.session || null);
       setContact(null);
-      setActivityLog('The saved Suka session was cleared.');
+      setActivityLog('The saved Sooka session was cleared.');
     } catch (error) {
       if (error.message === 'AUTH_REQUIRED') {
         navigate('/login', { replace: true });
@@ -920,11 +920,11 @@ function PortalPage() {
               <CardContent>
                 <form className="space-y-5" onSubmit={handlePairSubmit}>
                   <div>
-                    <label className="label" htmlFor="pairing-code">TV code or Suka pairing link</label>
+                    <label className="label" htmlFor="pairing-code">TV code or Sooka pairing link</label>
                     <Input
                       id="pairing-code"
                       rows={4}
-                      placeholder="NXXMP2 or https://suka.my/pair-tv?code=NXXMP2"
+                      placeholder="NXXMP2 or https://sooka.my/pair-tv?code=NXXMP2"
                       value={pairInput}
                       onChange={(event) => {
                         setPairInput(event.target.value);
@@ -1087,25 +1087,60 @@ function PortalPage() {
 
         <TabsContent value="session">
           <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
-            <Card>
-              <CardHeader>
-                <div className="flex items-center gap-3">
-                  <CardTitle>Session</CardTitle>
-                  <Badge variant={sessionTone}>{sessionLabel}</Badge>
-                  <Badge variant="neutral">{session?.source || 'no source'}</Badge>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <dl className="grid gap-4 sm:grid-cols-2">
-                  <StatusItem label="Account" value={contact?.name || contact?.email || 'Not verified'} />
-                  <StatusItem label="Customer ID" value={session?.customerId || '—'} />
-                  <StatusItem label="Valid until" value={session?.accessTokenExpiresAt ? `${formatDateTime(session.accessTokenExpiresAt)} (${formatDuration(sessionCountdownMs)} left)` : '—'} />
-                  <StatusItem label="Updated" value={formatDateTime(session?.updatedAt || session?.savedAt)} />
-                  <StatusItem label="Access token" value={session?.accessTokenPreview || 'Missing'} />
-                  <StatusItem label="Refresh token" value={session?.refreshTokenPreview || 'Missing'} />
-                </dl>
-              </CardContent>
-            </Card>
+            <div className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center gap-3">
+                    <CardTitle>Session</CardTitle>
+                    <Badge variant={sessionTone}>{sessionLabel}</Badge>
+                    <Badge variant="neutral">{session?.source || 'no source'}</Badge>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <dl className="grid gap-4 sm:grid-cols-2">
+                    <StatusItem label="Account" value={contact?.name || contact?.email || 'Not verified'} />
+                    <StatusItem label="Customer ID" value={session?.customerId || '—'} />
+                    <StatusItem label="Valid until" value={session?.accessTokenExpiresAt ? `${formatDateTime(session.accessTokenExpiresAt)} (${formatDuration(sessionCountdownMs)} left)` : '—'} />
+                    <StatusItem label="Updated" value={formatDateTime(session?.updatedAt || session?.savedAt)} />
+                    <StatusItem label="Access token" value={session?.accessTokenPreview || 'Missing'} />
+                    <StatusItem label="Refresh token" value={session?.refreshTokenPreview || 'Missing'} />
+                  </dl>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-sm font-semibold">How to get session data</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4 text-xs leading-relaxed text-muted-foreground">
+                  <ol className="list-decimal pl-4 space-y-3">
+                    <li>
+                      Go to the <strong>Sooka website</strong> (do not log in yet).
+                    </li>
+                    <li>
+                      Press <kbd className="px-1.5 py-0.5 rounded bg-muted text-foreground border border-border">F12</kbd> (or right-click and choose <strong>Inspect</strong>) to open Developer Tools, and switch to the <strong>Network</strong> tab.
+                    </li>
+                    <li>
+                      Perform the log in procedure so that the network request is recorded in real-time. Then search/filter for <code className="text-foreground bg-muted px-1 rounded font-mono">login</code> or <code className="text-foreground bg-muted px-1 rounded font-mono">tokens</code> in the network list.
+                    </li>
+                    <li>
+                      Look for the corresponding requests in the list:
+                      <ul className="list-disc pl-4 mt-2 space-y-1.5">
+                        <li>
+                          <strong>Login Response JSON</strong>: Find the <code className="text-foreground font-semibold">/login</code> request, and copy the entire JSON body from its <strong>Response</strong> tab.
+                        </li>
+                        <li>
+                          <strong>Request Headers JSON</strong>: Find the <code className="text-foreground font-semibold">/login/v1/contact</code> request, copy its Request Headers from the <strong>Headers</strong> tab, and convert them to JSON format.
+                          <p className="mt-1 text-[10px] text-amber-400 leading-normal">
+                            <strong>Note:</strong> The <code>Authorization</code> header is automatically populated using the <code>accessToken</code> from the Login Response. You do not need to manually specify it in the Request Headers JSON.
+                          </p>
+                        </li>
+                      </ul>
+                    </li>
+                  </ol>
+                </CardContent>
+              </Card>
+            </div>
 
             <Card>
               <CardHeader>
@@ -1115,11 +1150,55 @@ function PortalPage() {
                 <form className="space-y-5" onSubmit={saveSession}>
                   <div>
                     <label className="label" htmlFor="login-response">Login response JSON</label>
-                    <Textarea id="login-response" rows={9} value={loginResponse} onChange={(event) => setLoginResponse(event.target.value)} disabled={sessionBusy} placeholder='{"status":true,"data":{"accessToken":"..."}}' />
+                    <Textarea
+                      id="login-response"
+                      rows={9}
+                      value={loginResponse}
+                      onChange={(event) => setLoginResponse(event.target.value)}
+                      disabled={sessionBusy}
+                      placeholder={JSON.stringify({
+                        status: true,
+                        message: "Login Successful",
+                        data: {
+                          accessToken: "YOUR_ACCESS_TOKEN",
+                          refreshToken: "YOUR_REFRESH_TOKEN",
+                          userDetails: {
+                            customerId: "YOUR_CUSTOMER_ID",
+                            campaignId: "MAIN"
+                          },
+                          defaultProfileId: 123456
+                        },
+                        successCode: "#SUC-100-155"
+                      }, null, 2)}
+                    />
                   </div>
                   <div>
                     <label className="label" htmlFor="request-headers">Request headers JSON (optional)</label>
-                    <Textarea id="request-headers" rows={7} value={requestHeaders} onChange={(event) => setRequestHeaders(event.target.value)} disabled={sessionBusy} placeholder='{"x-pf":"web","tenant_identifier":"master"}' />
+                    <Textarea
+                      id="request-headers"
+                      rows={7}
+                      value={requestHeaders}
+                      onChange={(event) => setRequestHeaders(event.target.value)}
+                      disabled={sessionBusy}
+                      placeholder={JSON.stringify({
+                        "cp_id": "YOUR_CP_ID",
+                        "device_id": "YOUR_DEVICE_ID",
+                        "environmentcode": "MAIN",
+                        "language": "eng",
+                        "languagecode": "eng",
+                        "local": "MYS",
+                        "origin": "https://sooka.my",
+                        "platform": "WEB",
+                        "pragma": "no-cache",
+                        "priority": "u=1, i",
+                        "profileid": "YOUR_PROFILE_ID",
+                        "referer": "https://sooka.my/",
+                        "requestcount": "1",
+                        "tenant_identifier": "master",
+                        "user-agent": "YOUR_USER_AGENT",
+                        "x-api-key": "YOUR_API_KEY"
+                      }, null, 2)}
+                    />
                   </div>
                   <div className="flex flex-wrap gap-3">
                     <Button disabled={sessionBusy} type="submit">Save session</Button>
