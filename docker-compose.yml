@@ -3,27 +3,27 @@ services:
     build: .
     container_name: suka-portal
     ports:
-      - "8787:8787"
+      - "${PORT:-8787}:${PORT:-8787}"
     environment:
-      - PORT=8787
+      - PORT=${PORT:-8787}
       - AUTH_USER=${AUTH_USER}
       - AUTH_PASSWORD=${AUTH_PASSWORD}
       - APP_SESSION_SECRET=${APP_SESSION_SECRET}
-      - APP_SESSION_TTL_DAYS=30
-      - APP_SESSION_COOKIE_NAME=sooka_portal_session
-      - APP_LOG_FILE=.logs/portal.log
-      - APP_LOG_LEVEL=info
-      - APP_JOBS_FILE=.data/jobs.jsonl
-      - SOOKA_APP_URL=https://sooka.my
-      - SOOKA_API_BASE_URL=https://api.vr.ctrp.sooka.my
-      - SOOKA_PAIR_TV_URL=https://sooka.my/pair-tv
-      - SOOKA_VALIDATE_ENDPOINT=/login/v1/smart-tv/validate
-      - SOOKA_STATUS_ENDPOINT=/login/pub/v1/smart-tv/status
-      - SOOKA_SESSION_STORE_FILE=.data/sooka-session.json
-      - SOOKA_STATUS_POLL_INTERVAL_MS=1800
-      - SOOKA_STATUS_TIMEOUT_MS=90000
-      - SOOKA_STATUS_SUCCESS_REGEX=paired|success|linked|activated
-      - SOOKA_STATUS_FAILURE_REGEX=failed|invalid|expired|denied|forbidden|error
+      - APP_SESSION_TTL_DAYS=${APP_SESSION_TTL_DAYS:-30}
+      - APP_SESSION_COOKIE_NAME=${APP_SESSION_COOKIE_NAME:-sooka_portal_session}
+      - APP_LOG_FILE=${APP_LOG_FILE:-.logs/portal.log}
+      - APP_LOG_LEVEL=${APP_LOG_LEVEL:-info}
+      - APP_JOBS_FILE=${APP_JOBS_FILE:-.data/jobs.jsonl}
+      - SOOKA_APP_URL=${SOOKA_APP_URL:-https://sooka.my}
+      - SOOKA_API_BASE_URL=${SOOKA_API_BASE_URL:-https://api.vr.ctrp.sooka.my}
+      - SOOKA_PAIR_TV_URL=${SOOKA_PAIR_TV_URL:-https://sooka.my/pair-tv}
+      - SOOKA_VALIDATE_ENDPOINT=${SOOKA_VALIDATE_ENDPOINT:-/login/v1/smart-tv/validate}
+      - SOOKA_STATUS_ENDPOINT=${SOOKA_STATUS_ENDPOINT:-/login/pub/v1/smart-tv/status}
+      - SOOKA_SESSION_STORE_FILE=${SOOKA_SESSION_STORE_FILE:-.data/sooka-session.json}
+      - SOOKA_STATUS_POLL_INTERVAL_MS=${SOOKA_STATUS_POLL_INTERVAL_MS:-1800}
+      - SOOKA_STATUS_TIMEOUT_MS=${SOOKA_STATUS_TIMEOUT_MS:-90000}
+      - SOOKA_STATUS_SUCCESS_REGEX=${SOOKA_STATUS_SUCCESS_REGEX:-paired|success|linked|activated}
+      - SOOKA_STATUS_FAILURE_REGEX=${SOOKA_STATUS_FAILURE_REGEX:-failed|invalid|expired|denied|forbidden|error}
     volumes:
       - ./data:/app/.data
       - ./logs:/app/.logs
