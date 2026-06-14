@@ -654,6 +654,7 @@ function sendText(res, statusCode, body, headers = {}) {
 
 function sendRedirect(res, location, statusCode = 302) {
   res.writeHead(statusCode, {
+    'Content-Type': 'text/html; charset=utf-8',
     Location: location,
     'Content-Length': '0',
   });
@@ -767,7 +768,7 @@ function isPublicAssetPath(pathname) {
 
 function isStaticAssetPath(pathname) {
   return pathname.startsWith('/public/')
-    || /\.(css|js|map|png|jpg|jpeg|gif|svg|ico|webp|avif)$/i.test(pathname);
+    || /\.(css|js|map|png|jpg|jpeg|gif|svg|ico|webp|avif|woff|woff2)$/i.test(pathname);
 }
 
 function getContentType(filePath) {
@@ -775,6 +776,12 @@ function getContentType(filePath) {
   if (filePath.endsWith('.css')) return 'text/css; charset=utf-8';
   if (filePath.endsWith('.js')) return 'application/javascript; charset=utf-8';
   if (filePath.endsWith('.json')) return 'application/json; charset=utf-8';
+  if (filePath.endsWith('.woff2')) return 'font/woff2';
+  if (filePath.endsWith('.woff')) return 'font/woff';
+  if (filePath.endsWith('.svg')) return 'image/svg+xml';
+  if (filePath.endsWith('.ico')) return 'image/x-icon';
+  if (filePath.endsWith('.png')) return 'image/png';
+  if (filePath.endsWith('.jpg') || filePath.endsWith('.jpeg')) return 'image/jpeg';
   return 'application/octet-stream';
 }
 
