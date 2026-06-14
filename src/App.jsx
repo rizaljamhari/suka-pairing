@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
-import { FileClock, Link2, LogOut, QrCode, RefreshCcw } from 'lucide-react';
+import { FileClock, Link2, LogOut, QrCode, RefreshCcw, Trash2 } from 'lucide-react';
 import jsQR from 'jsqr';
 
 import { Badge } from './components/ui/badge';
@@ -512,6 +512,25 @@ function PortalPage() {
     return payload;
   }
 
+  async function handlePurgeHistory() {
+    if (!window.confirm('Are you sure you want to purge all TV pairing history? This cannot be undone.')) {
+      return;
+    }
+
+    try {
+      await apiJson('/api/jobs/purge', { method: 'POST' });
+      clearPairing();
+      setActivityLog('Pairing history purged successfully.');
+      await refreshJobs();
+    } catch (error) {
+      if (error.message === 'AUTH_REQUIRED') {
+        navigate('/login', { replace: true });
+        return;
+      }
+      setActivityLog(`Purge history failed: ${error.message}`);
+    }
+  }
+
   async function refreshLogs() {
     setLogsBusy(true);
     try {
@@ -893,7 +912,7 @@ function PortalPage() {
         </TabsList>
 
         <TabsContent value="pairing">
-          <div className="grid gap-6 xl:grid-cols-[1fr_1fr]">
+          <div className={job ? "grid gap-6 xl:grid-cols-[1fr_1fr]" : "max-w-xl mx-auto w-full"}>
             <Card>
               <CardHeader>
                 <CardTitle>Pair a TV</CardTitle>
@@ -960,9 +979,10 @@ function PortalPage() {
               </CardContent>
             </Card>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Live progress</CardTitle>
+            {job && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Live progress</CardTitle>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="space-y-2">
@@ -1025,6 +1045,7 @@ function PortalPage() {
                 </div>
               </CardContent>
             </Card>
+            )}
           </div>
 
           <Card className="mt-6">
@@ -1035,6 +1056,9 @@ function PortalPage() {
                   <Badge variant="neutral">{jobsSummary.total} total</Badge>
                   <Badge variant="ok">{jobsSummary.paired} paired</Badge>
                   {jobsSummary.failed > 0 && <Badge variant="danger">{jobsSummary.failed} failed</Badge>}
+                  <Button type="button" variant="destructive" size="sm" onClick={handlePurgeHistory} title="Purge history">
+                    <Trash2 className="h-3 w-3" />
+                  </Button>
                   <Button type="button" variant="outline" size="sm" onClick={refreshJobs}><RefreshCcw className="h-3 w-3" /></Button>
                 </div>
               </div>

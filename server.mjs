@@ -2031,6 +2031,19 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (req.method === 'POST' && pathname === '/api/jobs/purge') {
+    jobs.clear();
+    try {
+      writeFileSync(jobsStoreFile, '', 'utf8');
+      logInfo('pairing.jobs.purged', { requestId });
+      sendJson(res, 200, { success: true });
+    } catch (error) {
+      logError('pairing.jobs.purge_failed', { requestId, error: error.message });
+      sendJson(res, 500, { error: 'Failed to purge history file' });
+    }
+    return;
+  }
+
   if (req.method === 'GET' && pathname === '/api/logs') {
     const minutes = Number(query.minutes || 60);
     const level = typeof query.level === 'string' ? query.level.toLowerCase() : '';
