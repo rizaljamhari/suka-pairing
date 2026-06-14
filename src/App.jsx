@@ -39,7 +39,7 @@ function labelFromSession(session) {
   }
 
   if (session.verificationFailed) {
-    return 'Verification failed';
+    return 'Verification failed. Please update your Sooka session';
   }
 
   if (session.refreshRecommended) {
@@ -905,7 +905,15 @@ function PortalPage() {
     <main className="shell">
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Badge variant={sessionTone}>{session ? `Session ${sessionLabel.toLowerCase()}` : 'Checking'}</Badge>
+          <Badge variant={sessionTone}>
+            {session ? (
+              session.verificationFailed ? (
+                "Session verification failed. Please update your Sooka session"
+              ) : (
+                `Session ${sessionLabel.toLowerCase()}`
+              )
+            ) : 'Checking'}
+          </Badge>
         </div>
         <div className="flex items-center gap-3">
           <p className="text-sm text-muted-foreground">{authUser}</p>
