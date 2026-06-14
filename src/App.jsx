@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { FileClock, Link2, LogOut, QrCode, RefreshCcw } from 'lucide-react';
+import jsQR from 'jsqr';
 
 import { Badge } from './components/ui/badge';
 import { Button } from './components/ui/button';
@@ -169,57 +170,45 @@ function sanitizeDisplayCode(rawInput) {
   return /^[A-Z0-9]{6}$/.test(cleaned) ? cleaned : null;
 }
 
-function loadScript(src) {
-  return new Promise((resolve, reject) => {
-    if (window.jsQR) {
-      resolve(window.jsQR);
-      return;
-    }
-    const script = document.createElement('script');
-    script.src = src;
-    script.onload = () => resolve(window.jsQR);
-    script.onerror = (err) => reject(err);
-    document.head.appendChild(script);
-  });
-}
-
 function readImageToCanvas(file) {
   return new Promise((resolve, reject) => {
-    if (typeof window.createImageBitmap === 'function') {
-      createImageBitmap(file)
-        .then((bitmap) => {
-          const canvas = document.createElement('canvas');
-          canvas.width = bitmap.width;
-          canvas.height = bitmap.height;
-          const context = canvas.getContext('2d');
-          context.drawImage(bitmap, 0, 0);
-          resolve(canvas);
-        })
-        .catch(() => {
-          fallback();
-        });
-    } else {
-      fallback();
-    }
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const maxDimension = 1024;
+        let width = img.width;
+        let height = img.height;
+        if (width > maxDimension || height > maxDimension) {
+          if (width > height) {
+            height = Math.round((height * maxDimension) / width);
+            width = maxDimension;
+          } else {
+            width = Math.round((width * maxDimension) / height);
+            height = maxDimension;
+          }
+        }
 
-    function fallback() {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const img = new Image();
-        img.onload = () => {
-          const canvas = document.createElement('canvas');
-          canvas.width = img.width;
-          canvas.height = img.height;
-          const context = canvas.getContext('2d');
-          context.drawImage(img, 0, 0);
-          resolve(canvas);
-        };
-        img.onerror = (err) => reject(err);
-        img.src = e.target.result;
-      };
-      reader.onerror = (err) => reject(err);
-      reader.readAsDataURL(file);
-    }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const context = canvas.getContext('2d');
+        if (!context) {
+          throw new Error('Failed to get canvas 2D context');
+        }
+        context.drawImage(img, 0, 0, width, height);
+        URL.revokeObjectURL(url);
+        resolve(canvas);
+      } catch (err) {
+        URL.revokeObjectURL(url);
+        reject(err);
+      }
+    };
+    img.onerror = (err) => {
+      URL.revokeObjectURL(url);
+      reject(new Error('Failed to load image. Make sure the file is a valid image.'));
+    };
+    img.src = url;
   });
 }
 
@@ -233,7 +222,7 @@ async function detectQrCode(file) {
     canvas = await readImageToCanvas(file);
   } catch (err) {
     console.error('Failed to load image to canvas:', err);
-    return null;
+    throw new Error(`Failed to load image: ${err.message}`);
   }
 
   if ('BarcodeDetector' in window) {
@@ -244,23 +233,21 @@ async function detectQrCode(file) {
         return results[0].rawValue;
       }
     } catch (err) {
-      console.warn('Native BarcodeDetector failed, trying fallback:', err);
+      console.warn('Native BarcodeDetector failed, trying bundled jsQR:', err);
     }
   }
 
   try {
-    const jsQR = await loadScript('https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js');
-    if (!jsQR) {
-      return null;
-    }
-
     const context = canvas.getContext('2d');
+    if (!context) {
+      throw new Error('Could not get 2D context from canvas');
+    }
     const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
     const result = jsQR(imageData.data, imageData.width, imageData.height);
     return result?.data || null;
   } catch (error) {
-    console.error('jsQR fallback failed:', error);
-    return null;
+    console.error('jsQR scanning failed:', error);
+    throw new Error(`QR scanning failed: ${error.message}`);
   }
 }
 
@@ -401,6 +388,8 @@ function PortalPage() {
   const [job, setJob] = useState(null);
   const [jobBusy, setJobBusy] = useState(false);
   const [activityLog, setActivityLog] = useState('Loading workspace...');
+  const [scanStatus, setScanStatus] = useState(null); // 'loading' | 'success' | 'error' | null
+  const [scanMessage, setScanMessage] = useState('');
   const [loginResponse, setLoginResponse] = useState('');
   const [requestHeaders, setRequestHeaders] = useState('');
   const [sessionBusy, setSessionBusy] = useState(false);
@@ -617,14 +606,34 @@ function PortalPage() {
   }
 
   async function handleFile(file) {
-    const decoded = await detectQrCode(file);
-    if (!decoded) {
-      setActivityLog('We could not read a QR code from that image. Paste the 6-character TV code instead.');
+    if (!file) {
+      setScanStatus('error');
+      setScanMessage('No file selected.');
       return;
     }
 
-    setPairInput(decoded);
-    setActivityLog(`Code read from image:\n${decoded}`);
+    setScanStatus('loading');
+    setScanMessage(`Loading "${file.name}" (${(file.size / 1024).toFixed(1)} KB)...`);
+    setActivityLog(`Loading "${file.name}" (${(file.size / 1024).toFixed(1)} KB)...`);
+
+    try {
+      const decoded = await detectQrCode(file);
+      if (!decoded) {
+        setScanStatus('error');
+        setScanMessage(`Could not find a valid QR code in "${file.name}". Please make sure the screenshot is clear and uncropped.`);
+        setActivityLog(`Could not find a valid QR code in "${file.name}".\n\nPlease make sure the QR screenshot is clear and uncropped, or enter the 6-character TV code manually.`);
+        return;
+      }
+
+      setPairInput(decoded);
+      setScanStatus('success');
+      setScanMessage(`Successfully scanned QR code from "${file.name}"!`);
+      setActivityLog(`Successfully scanned QR code from "${file.name}".\n\nDecoded URL/Code:\n${decoded}`);
+    } catch (error) {
+      setScanStatus('error');
+      setScanMessage(`Error scanning image: ${error.message}`);
+      setActivityLog(`Error processing image "${file.name}":\n${error.message}`);
+    }
   }
 
   async function handlePairSubmit(event) {
@@ -701,6 +710,8 @@ function PortalPage() {
     setPairInput('');
     setJob(null);
     setJobBusy(false);
+    setScanStatus(null);
+    setScanMessage('');
     setActivityLog('Waiting for the next TV code.');
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
@@ -856,7 +867,13 @@ function PortalPage() {
                       rows={4}
                       placeholder="NXXMP2 or https://suka.my/pair-tv?code=NXXMP2"
                       value={pairInput}
-                      onChange={(event) => setPairInput(event.target.value)}
+                      onChange={(event) => {
+                        setPairInput(event.target.value);
+                        if (scanStatus) {
+                          setScanStatus(null);
+                          setScanMessage('');
+                        }
+                      }}
                       disabled={jobBusy}
                     />
                   </div>
@@ -871,14 +888,28 @@ function PortalPage() {
                     </div>
                     <input
                       ref={fileInputRef}
-                      className="hidden"
+                      className="sr-only"
                       type="file"
                       accept="image/*"
                       onChange={async (event) => {
                         const [file] = event.target.files || [];
-                        await handleFile(file);
+                        if (file) {
+                          await handleFile(file);
+                        }
+                        event.target.value = '';
                       }}
                     />
+                    {scanStatus && (
+                      <div className={`mt-3 rounded-xl border p-3 text-xs leading-relaxed ${
+                        scanStatus === 'loading'
+                          ? 'border-blue-500/30 bg-blue-500/10 text-blue-400'
+                          : scanStatus === 'success'
+                            ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
+                            : 'border-rose-500/30 bg-rose-500/10 text-rose-400'
+                      }`}>
+                        {scanMessage}
+                      </div>
+                    )}
                   </div>
 
                   <div className="flex flex-wrap gap-3">
