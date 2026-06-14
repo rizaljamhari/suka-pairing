@@ -1,6 +1,6 @@
 # Suka (read as Sooka) Pairing Portal
 
-Internal family portal for pairing a TV to a Suka account.
+Internal family portal for pairing a TV to a Sooka account.
 
 ## Why this exists (Motivation)
 
@@ -52,7 +52,7 @@ The application can be configured using the following environment variables in `
 ---
 
 ## Notes
-- **Internet Exposure & Security Warning**: If you choose to expose this portal to the public internet (e.g., to allow family members to access it from their homes), **make sure you know what you are doing**. Since this portal stores a valid, active Suka streaming session (under `./data`), anyone who accesses the portal gains control over your session. Ensure you configure a very strong `AUTH_USER` and `AUTH_PASSWORD`, and serve it over HTTPS (e.g., behind a secure reverse proxy).
+- **Internet Exposure & Security Warning**: If you choose to expose this portal to the public internet (e.g., to allow family members to access it from their homes), **make sure you know what you are doing**. Since this portal stores a valid, active Sooka streaming session (under `./data`), anyone who accesses the portal gains control over your session. Ensure you configure a very strong `AUTH_USER` and `AUTH_PASSWORD`, and serve it over HTTPS (e.g., behind a secure reverse proxy).
 - Keep this on a trusted home network if not exposing it.
 - `.env`, `./data`, and `./logs` are ignored by git and should stay local.
 - Never commit credentials or session tokens to the repository.
