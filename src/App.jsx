@@ -1160,6 +1160,9 @@ function PortalPage() {
                       </ul>
                     </li>
                   </ol>
+                  <div className="mt-4 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-[11px] leading-relaxed text-rose-400">
+                    <strong>Important:</strong> Do not log out of Sooka or remove the browser session from Sooka's device management settings. Doing so will immediately invalidate the token, causing the pairing portal to lose access.
+                  </div>
                 </CardContent>
               </Card>
             </div>
