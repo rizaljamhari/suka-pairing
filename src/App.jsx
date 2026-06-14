@@ -18,7 +18,7 @@ const timelineSteps = [
 ];
 
 function toneFromSession(session) {
-  if (!session?.hasAccessToken || session.accessTokenExpired) {
+  if (!session?.hasAccessToken || session.accessTokenExpired || session.verificationFailed) {
     return 'danger';
   }
 
@@ -36,6 +36,10 @@ function labelFromSession(session) {
 
   if (session.accessTokenExpired) {
     return 'Expired';
+  }
+
+  if (session.verificationFailed) {
+    return 'Verification failed';
   }
 
   if (session.refreshRecommended) {
@@ -824,6 +828,11 @@ function PortalPage() {
       }
 
       setActivityLog(`Session verification failed: ${error.message}`);
+      try {
+        await refreshSessionStatus();
+      } catch (refreshError) {
+        // Ignore status refresh errors
+      }
     } finally {
       setSessionBusy(false);
     }
@@ -844,6 +853,11 @@ function PortalPage() {
       }
 
       setActivityLog(`Token refresh failed: ${error.message}`);
+      try {
+        await refreshSessionStatus();
+      } catch (refreshError) {
+        // Ignore status refresh errors
+      }
     } finally {
       setSessionBusy(false);
     }

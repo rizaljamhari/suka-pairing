@@ -338,6 +338,7 @@ function normalizeSessionState(input = {}) {
     requestHeaders: normalizeHeaderMap(input.requestHeaders),
     lastVerifiedContact: isRecord(input.lastVerifiedContact) ? input.lastVerifiedContact : null,
     lastVerifiedAt: typeof input.lastVerifiedAt === 'string' ? input.lastVerifiedAt : null,
+    verificationFailed: input.verificationFailed === true,
     updatedAt: typeof input.updatedAt === 'string' ? input.updatedAt : null,
     savedAt: typeof input.savedAt === 'string' ? input.savedAt : null,
     source: input.source || (accessToken || refreshToken || loginResponse ? 'env' : 'none'),
@@ -379,6 +380,7 @@ function loadPersistedSessionState() {
       requestHeaders: isRecord(parsed.requestHeaders) ? parsed.requestHeaders : {},
       lastVerifiedContact: isRecord(parsed.lastVerifiedContact) ? parsed.lastVerifiedContact : null,
       lastVerifiedAt: typeof parsed.lastVerifiedAt === 'string' ? parsed.lastVerifiedAt : null,
+      verificationFailed: parsed.verificationFailed === true,
       source: 'persisted',
       updatedAt: typeof parsed.updatedAt === 'string' ? parsed.updatedAt : null,
       savedAt: typeof parsed.savedAt === 'string' ? parsed.savedAt : null,
@@ -405,6 +407,7 @@ function persistSessionState(nextState) {
     requestHeaders: normalized.requestHeaders,
     lastVerifiedContact: normalized.lastVerifiedContact,
     lastVerifiedAt: normalized.lastVerifiedAt,
+    verificationFailed: normalized.verificationFailed,
     updatedAt: now(),
     savedAt: now(),
   };
@@ -461,6 +464,7 @@ function sessionSummary() {
     savedAt: sessionState.savedAt,
     lastVerifiedContact: sessionState.lastVerifiedContact || null,
     lastVerifiedAt: sessionState.lastVerifiedAt || null,
+    verificationFailed: sessionState.verificationFailed === true,
     accessTokenExpiresAt: accessTokenExpiresAtMs ? new Date(accessTokenExpiresAtMs).toISOString() : null,
     accessTokenExpiresInMs,
     accessTokenExpired: Number.isFinite(accessTokenExpiresInMs) ? accessTokenExpiresInMs <= 0 : false,
@@ -568,6 +572,7 @@ async function refreshSessionTokens(force = false) {
       campaignId: activeSession.campaignId,
       defaultProfileId: activeSession.defaultProfileId,
       loginResponse: response.json,
+      verificationFailed: false,
       updatedAt: now(),
       savedAt: now(),
     });
@@ -1833,6 +1838,36 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (req.method === 'GET' && pathname === '/api/bootstrap/status') {
+    if (sessionState.accessToken) {
+      try {
+        const verification = await verifySessionCandidate(sessionState);
+        if (!verification.ok) {
+          logError('session.status_auto_verify.failed', {
+            requestId,
+            details: verification.message,
+          });
+          persistSessionState({
+            ...sessionState,
+            lastVerifiedContact: null,
+            lastVerifiedAt: null,
+            verificationFailed: true,
+          });
+        } else if (verification.contact) {
+          persistSessionState({
+            ...sessionState,
+            lastVerifiedContact: verification.contact,
+            lastVerifiedAt: now(),
+            verificationFailed: false,
+          });
+        }
+      } catch (error) {
+        logError('session.status_auto_verify.error', {
+          requestId,
+          error: error.message,
+        });
+      }
+    }
+
     sendJson(res, 200, {
       session: sessionSummary(),
       guidance: 'Paste the raw /login JSON response and optional request headers JSON from an authenticated Sooka API request.',
@@ -1917,6 +1952,12 @@ const server = http.createServer(async (req, res) => {
           probeStatus: verification.probe.status,
           probeBody: verification.probe.json || verification.probe.text,
         });
+        persistSessionState({
+          ...sessionState,
+          lastVerifiedContact: null,
+          lastVerifiedAt: null,
+          verificationFailed: true,
+        });
         sendJson(res, 401, {
           ok: false,
           details: verification.message,
@@ -1975,6 +2016,12 @@ const server = http.createServer(async (req, res) => {
       logError('session.refresh.api_error', {
         requestId,
         error,
+      });
+      persistSessionState({
+        ...sessionState,
+        lastVerifiedContact: null,
+        lastVerifiedAt: null,
+        verificationFailed: true,
       });
       sendJson(res, 400, {
         ok: false,
