@@ -1,0 +1,13 @@
+{
+  "name": "sooka-pairing-portal",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node --env-file=.env server.mjs",
+    "start:raw": "node server.mjs"
+  },
+  "devDependencies": {
+    "shadcn": "^4.11.0"
+  }
+}
