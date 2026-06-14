@@ -225,6 +225,7 @@ async function detectQrCode(file) {
     throw new Error(`Failed to load image: ${err.message}`);
   }
 
+  // Attempt 1: Native BarcodeDetector (if supported)
   if ('BarcodeDetector' in window) {
     try {
       const detector = new BarcodeDetector({ formats: ['qr_code'] });
@@ -237,6 +238,7 @@ async function detectQrCode(file) {
     }
   }
 
+  // Attempt 2: Standard jsQR scan on original canvas
   try {
     const context = canvas.getContext('2d');
     if (!context) {
@@ -244,11 +246,49 @@ async function detectQrCode(file) {
     }
     const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
     const result = jsQR(imageData.data, imageData.width, imageData.height);
-    return result?.data || null;
+    if (result?.data) {
+      return result.data;
+    }
   } catch (error) {
-    console.error('jsQR scanning failed:', error);
-    throw new Error(`QR scanning failed: ${error.message}`);
+    console.error('jsQR original scan failed:', error);
   }
+
+  // Attempt 3: jsQR scan with Grayscale & Contrast Boosting (fallback for TV screen photo glare)
+  try {
+    const context = canvas.getContext('2d');
+    if (context) {
+      const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+      const data = imageData.data;
+
+      // In-place grayscale + contrast multiplier (factor = 3.0)
+      for (let i = 0; i < data.length; i += 4) {
+        const r = data[i];
+        const g = data[i+1];
+        const b = data[i+2];
+
+        // Luminance grayscale formula
+        const gray = 0.299 * r + 0.587 * g + 0.114 * b;
+
+        // Boost contrast around midtones
+        let val = (gray - 128) * 3.0 + 128;
+        if (val < 0) val = 0;
+        if (val > 255) val = 255;
+
+        data[i] = val;
+        data[i+1] = val;
+        data[i+2] = val;
+      }
+
+      const processedResult = jsQR(data, imageData.width, imageData.height);
+      if (processedResult?.data) {
+        return processedResult.data;
+      }
+    }
+  } catch (error) {
+    console.error('jsQR processed scan failed:', error);
+  }
+
+  return null;
 }
 
 function summarizeLog(entry) {
