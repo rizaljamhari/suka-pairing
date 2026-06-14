@@ -912,7 +912,7 @@ function PortalPage() {
         </TabsList>
 
         <TabsContent value="pairing">
-          <div className={job ? "grid gap-6 xl:grid-cols-[1fr_1fr]" : "max-w-xl mx-auto w-full"}>
+          <div className={job ? "grid gap-6 xl:grid-cols-[1fr_1fr]" : "grid gap-6 max-w-xl mx-auto xl:max-w-none xl:grid-cols-[1fr_1fr] w-full"}>
             <Card>
               <CardHeader>
                 <CardTitle>Pair a TV</CardTitle>
@@ -979,10 +979,9 @@ function PortalPage() {
               </CardContent>
             </Card>
 
-            {job && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Live progress</CardTitle>
+            <Card className={!job ? "hidden xl:flex" : ""}>
+              <CardHeader>
+                <CardTitle>Live progress</CardTitle>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="space-y-2">
@@ -1045,7 +1044,6 @@ function PortalPage() {
                 </div>
               </CardContent>
             </Card>
-            )}
           </div>
 
           <Card className="mt-6">
