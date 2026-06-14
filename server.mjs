@@ -84,12 +84,13 @@ async function sendNtfyNotification(title, message, tags = '') {
     return;
   }
 
+  const safeTitle = title.replace(/[^\x00-\x7F]/g, '').trim();
   const url = `${ntfyUrl}/${ntfyTopic}`;
   const headers = {
-    'Title': title,
+    'Title': safeTitle,
   };
   if (tags) {
-    headers['Tags'] = tags;
+    headers['Tags'] = tags.replace(/[^\x00-\x7F]/g, '').trim();
   }
   if (ntfyToken) {
     headers['Authorization'] = `Bearer ${ntfyToken}`;
@@ -1366,7 +1367,7 @@ async function runPairing(jobId) {
       result: 'invalid_code',
     });
     sendNtfyNotification(
-      'TV Pairing Rejected ❌',
+      'TV Pairing Rejected',
       `Reason: The provided input did not contain a valid 6-character pairing code.`,
       'x,tv'
     );
@@ -1415,7 +1416,7 @@ async function runPairing(jobId) {
         resultDetails: compactPreview(validation.response?.json || validation.response?.text),
       });
       sendNtfyNotification(
-        'TV Pairing Failed ❌',
+        'TV Pairing Failed',
         `TV Code: ${code}\nDevice: Unknown Device\n\nSooka validation failed (HTTP ${validation.response?.status || 'n/a'}).`,
         'x,tv'
       );
@@ -1441,9 +1442,9 @@ async function runPairing(jobId) {
         resultDetails: compactPreview(validationPayload),
       });
       sendNtfyNotification(
-        'TV Paired Successfully 🎉',
+        'TV Paired Successfully',
         `TV Code: ${code}\nDevice: ${deviceName}\n\nSuccessfully paired with Suka immediately from validation response.`,
-        'heavy_check_mark,tv'
+        'tada,tv'
       );
       return;
     }
@@ -1493,9 +1494,9 @@ async function runPairing(jobId) {
           resultDetails: compactPreview(statusPayload),
         });
         sendNtfyNotification(
-          'TV Paired Successfully 🎉',
+          'TV Paired Successfully',
           `TV Code: ${code}\nDevice: ${deviceName}\n\nTV pairing confirmed successfully by Sooka status.`,
-          'heavy_check_mark,tv'
+          'tada,tv'
         );
         return;
       }
@@ -1515,7 +1516,7 @@ async function runPairing(jobId) {
           resultDetails: compactPreview(statusPayload),
         });
         sendNtfyNotification(
-          'TV Pairing Failed ❌',
+          'TV Pairing Failed',
           `TV Code: ${code}\nDevice: ${deviceName}\n\nSooka status returned a terminal failure state.`,
           'x,tv'
         );
@@ -1544,7 +1545,7 @@ async function runPairing(jobId) {
       timeoutMs: statusTimeoutMs,
     });
     sendNtfyNotification(
-      'TV Pairing Timed Out ⚠️',
+      'TV Pairing Timed Out',
       `TV Code: ${code}\nDevice: ${deviceName}\n\nTimed out waiting for Sooka status confirmation.`,
       'warning,tv'
     );
@@ -1564,9 +1565,9 @@ async function runPairing(jobId) {
     });
     const currentDeviceName = jobs.get(jobId)?.deviceName || 'Unknown Device';
     sendNtfyNotification(
-      'TV Pairing Error ❌',
+      'TV Pairing Error',
       `TV Code: ${code}\nDevice: ${currentDeviceName}\n\nUnexpected error: ${error instanceof Error ? error.message : String(error)}`,
-      'x,tv'
+      'rotating_light,tv'
     );
   }
 }
