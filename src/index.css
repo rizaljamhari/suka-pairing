@@ -1,0 +1,37 @@
+@import "tw-animate-css";
+@import "@fontsource-variable/inter";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  body {
+    @apply min-h-screen antialiased bg-background text-foreground;
+  }
+
+  #root {
+    @apply min-h-screen;
+  }
+
+  html {
+    @apply font-sans;
+  }
+}
+
+@layer components {
+  .shell {
+    @apply mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8;
+  }
+
+  .section-kicker {
+    @apply text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground;
+  }
+
+  .label {
+    @apply mb-2 block text-sm font-medium text-foreground;
+  }
+}

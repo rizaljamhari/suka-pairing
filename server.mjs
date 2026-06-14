@@ -1,13 +1,14 @@
 import http from 'node:http';
 import { readFile } from 'node:fs/promises';
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync } from 'node:fs';
+import { appendFileSync, closeSync, existsSync, fstatSync, mkdirSync, openSync, readFileSync, readSync, writeFileSync, unlinkSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const publicDir = path.join(__dirname, 'public');
+const clientDistDir = path.join(__dirname, 'client-dist');
+const clientEntryFile = path.join(clientDistDir, 'index.html');
 
 function getRequiredEnv(name) {
   const value = process.env[name];
@@ -38,6 +39,7 @@ const sookaRefreshToken = process.env.SOOKA_REFRESH_TOKEN || '';
 const sookaLoginResponseJson = process.env.SOOKA_LOGIN_RESPONSE_JSON || '';
 const sookaRequestHeadersJson = process.env.SOOKA_REQUEST_HEADERS_JSON || '';
 const sookaSessionStoreFile = process.env.SOOKA_SESSION_STORE_FILE || path.join(__dirname, '.data', 'sooka-session.json');
+const jobsStoreFile = process.env.APP_JOBS_FILE || path.join(__dirname, '.data', 'jobs.jsonl');
 const sookaTenantIdentifier = process.env.SOOKA_TENANT_IDENTIFIER || 'master';
 const sookaLanguage = process.env.SOOKA_LANGUAGE || 'eng';
 const statusPollIntervalMs = Number(process.env.SOOKA_STATUS_POLL_INTERVAL_MS || 1800);
@@ -46,6 +48,61 @@ const successRegex = new RegExp(process.env.SOOKA_STATUS_SUCCESS_REGEX || 'paire
 const failureRegex = new RegExp(process.env.SOOKA_STATUS_FAILURE_REGEX || 'failed|invalid|expired|denied|forbidden|error', 'i');
 
 const jobs = new Map();
+
+function loadPersistedJobs() {
+  if (!existsSync(jobsStoreFile)) {
+    return;
+  }
+
+  try {
+    const raw = readFileSync(jobsStoreFile, 'utf8');
+    for (const line of raw.split('\n').filter(Boolean)) {
+      try {
+        const job = JSON.parse(line);
+        if (job && typeof job.id === 'string') {
+          jobs.set(job.id, job);
+        }
+      } catch {
+        // Skip malformed lines.
+      }
+    }
+  } catch (error) {
+    console.error('Failed to load persisted jobs', error);
+  }
+}
+
+function persistJob(job) {
+  try {
+    mkdirSync(path.dirname(jobsStoreFile), { recursive: true });
+
+    if (!existsSync(jobsStoreFile)) {
+      // First write — just append.
+      appendFileSync(jobsStoreFile, `${JSON.stringify(job)}\n`, 'utf8');
+      return;
+    }
+
+    const raw = readFileSync(jobsStoreFile, 'utf8');
+    const lines = raw.split('\n').filter(Boolean);
+    const existingIndex = lines.findIndex((line) => {
+      try {
+        return JSON.parse(line).id === job.id;
+      } catch {
+        return false;
+      }
+    });
+
+    if (existingIndex === -1) {
+      // New job — append.
+      appendFileSync(jobsStoreFile, `${JSON.stringify(job)}\n`, 'utf8');
+    } else {
+      // Existing job — replace that line.
+      lines[existingIndex] = JSON.stringify(job);
+      writeFileSync(jobsStoreFile, `${lines.join('\n')}\n`, 'utf8');
+    }
+  } catch (error) {
+    console.error('Failed to persist job', error);
+  }
+}
 const logLevelRank = {
   debug: 10,
   info: 20,
@@ -101,6 +158,9 @@ function shouldLog(level) {
   return targetRank >= currentRank;
 }
 
+const LOG_MAX_BYTES = 15 * 1024 * 1024;  // 15 MB
+const LOG_KEEP_BYTES = 10 * 1024 * 1024; // keep last 10 MB after truncation
+
 function writeLog(level, event, details = {}) {
   if (!shouldLog(level)) {
     return;
@@ -115,6 +175,21 @@ function writeLog(level, event, details = {}) {
       ...normalizeLogValue(details),
     };
     appendFileSync(appLogFile, `${JSON.stringify(entry)}\n`, 'utf8');
+
+    // Roll the log if it has grown too large.
+    const fd = openSync(appLogFile, 'r');
+    const { size } = fstatSync(fd);
+    closeSync(fd);
+    if (size > LOG_MAX_BYTES) {
+      const keepFd = openSync(appLogFile, 'r');
+      const start = size - LOG_KEEP_BYTES;
+      const buf = Buffer.allocUnsafe(LOG_KEEP_BYTES);
+      readSync(keepFd, buf, 0, LOG_KEEP_BYTES, start);
+      closeSync(keepFd);
+      // Drop the first (likely partial) line so we keep only complete JSON lines.
+      const tail = buf.toString('utf8').replace(/^[^\n]*\n/, '');
+      writeFileSync(appLogFile, tail, 'utf8');
+    }
   } catch (error) {
     console.error('Failed to write log entry', error);
   }
@@ -188,6 +263,8 @@ function normalizeSessionState(input = {}) {
     defaultProfileId: input.defaultProfileId ?? derived.defaultProfileId ?? null,
     loginResponse,
     requestHeaders: normalizeHeaderMap(input.requestHeaders),
+    lastVerifiedContact: isRecord(input.lastVerifiedContact) ? input.lastVerifiedContact : null,
+    lastVerifiedAt: typeof input.lastVerifiedAt === 'string' ? input.lastVerifiedAt : null,
     updatedAt: typeof input.updatedAt === 'string' ? input.updatedAt : null,
     savedAt: typeof input.savedAt === 'string' ? input.savedAt : null,
     source: input.source || (accessToken || refreshToken || loginResponse ? 'env' : 'none'),
@@ -227,6 +304,8 @@ function loadPersistedSessionState() {
       defaultProfileId: parsed.defaultProfileId ?? null,
       loginResponse: isRecord(parsed.loginResponse) ? parsed.loginResponse : null,
       requestHeaders: isRecord(parsed.requestHeaders) ? parsed.requestHeaders : {},
+      lastVerifiedContact: isRecord(parsed.lastVerifiedContact) ? parsed.lastVerifiedContact : null,
+      lastVerifiedAt: typeof parsed.lastVerifiedAt === 'string' ? parsed.lastVerifiedAt : null,
       source: 'persisted',
       updatedAt: typeof parsed.updatedAt === 'string' ? parsed.updatedAt : null,
       savedAt: typeof parsed.savedAt === 'string' ? parsed.savedAt : null,
@@ -251,6 +330,8 @@ function persistSessionState(nextState) {
     defaultProfileId: normalized.defaultProfileId,
     loginResponse: normalized.loginResponse,
     requestHeaders: normalized.requestHeaders,
+    lastVerifiedContact: normalized.lastVerifiedContact,
+    lastVerifiedAt: normalized.lastVerifiedAt,
     updatedAt: now(),
     savedAt: now(),
   };
@@ -280,6 +361,18 @@ function sessionSummary() {
     ? accessTokenExpiresAtMs - Date.now()
     : null;
 
+  const maskToken = (token) => {
+    if (typeof token !== 'string' || !token) {
+      return null;
+    }
+
+    if (token.length <= 12) {
+      return `${token.slice(0, 4)}...${token.slice(-4)}`;
+    }
+
+    return `${token.slice(0, 8)}...${token.slice(-6)}`;
+  };
+
   return {
     source: sessionState.source,
     hasAccessToken: Boolean(sessionState.accessToken),
@@ -289,8 +382,12 @@ function sessionSummary() {
     customerId: sessionState.customerId,
     campaignId: sessionState.campaignId,
     defaultProfileId: sessionState.defaultProfileId,
+    accessTokenPreview: maskToken(sessionState.accessToken),
+    refreshTokenPreview: maskToken(sessionState.refreshToken),
     updatedAt: sessionState.updatedAt,
     savedAt: sessionState.savedAt,
+    lastVerifiedContact: sessionState.lastVerifiedContact || null,
+    lastVerifiedAt: sessionState.lastVerifiedAt || null,
     accessTokenExpiresAt: accessTokenExpiresAtMs ? new Date(accessTokenExpiresAtMs).toISOString() : null,
     accessTokenExpiresInMs,
     accessTokenExpired: Number.isFinite(accessTokenExpiresInMs) ? accessTokenExpiresInMs <= 0 : false,
@@ -665,7 +762,7 @@ function getAuthenticatedUser(req) {
 }
 
 function isPublicAssetPath(pathname) {
-  return pathname === '/styles.css' || pathname === '/login.js';
+  return isStaticAssetPath(pathname);
 }
 
 function isStaticAssetPath(pathname) {
@@ -677,7 +774,71 @@ function getContentType(filePath) {
   if (filePath.endsWith('.html')) return 'text/html; charset=utf-8';
   if (filePath.endsWith('.css')) return 'text/css; charset=utf-8';
   if (filePath.endsWith('.js')) return 'application/javascript; charset=utf-8';
+  if (filePath.endsWith('.json')) return 'application/json; charset=utf-8';
   return 'application/octet-stream';
+}
+
+function hasClientBuild() {
+  return existsSync(clientEntryFile);
+}
+
+function sendMissingClientBuild(res) {
+  sendText(res, 503, 'Frontend build not found. Run npm start or npm run build before opening the portal.');
+}
+
+function serializeJob(job) {
+  return {
+    ...job,
+    terminal: Boolean(job.terminal),
+  };
+}
+
+function listJobs() {
+  return [...jobs.values()]
+    .map(serializeJob)
+    .sort((left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime());
+}
+
+function readRecentLogs(minutes = 60) {
+  if (!existsSync(appLogFile)) {
+    return [];
+  }
+
+  const windowMs = Math.max(1, Math.min(minutes, 60 * 24)) * 60 * 1000;
+  const cutoff = Date.now() - windowMs;
+
+  // Read only the tail of the file to avoid OOM on very large log files.
+  const MAX_TAIL_BYTES = 2 * 1024 * 1024; // 2 MB
+  let raw;
+  try {
+    const fd = openSync(appLogFile, 'r');
+    const { size } = fstatSync(fd);
+    const start = Math.max(0, size - MAX_TAIL_BYTES);
+    const length = size - start;
+    const buf = Buffer.allocUnsafe(length);
+    readSync(fd, buf, 0, length, start);
+    closeSync(fd);
+    raw = buf.toString('utf8');
+  } catch {
+    return [];
+  }
+
+  return raw
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => {
+      try {
+        return JSON.parse(line);
+      } catch {
+        return null;
+      }
+    })
+    .filter((entry) => entry && typeof entry.ts === 'string')
+    .filter((entry) => {
+      const timestamp = new Date(entry.ts).getTime();
+      return Number.isFinite(timestamp) && timestamp >= cutoff;
+    })
+    .sort((left, right) => new Date(right.ts).getTime() - new Date(left.ts).getTime());
 }
 
 function sanitizeCodeInput(rawInput) {
@@ -728,6 +889,7 @@ function createJob(rawInput) {
   };
 
   jobs.set(id, job);
+  persistJob(job);
   logInfo('pairing.job.created', {
     jobId: id,
     rawInput,
@@ -750,6 +912,7 @@ function updateJob(jobId, patch) {
   };
 
   jobs.set(jobId, next);
+  persistJob(next);
   return next;
 }
 
@@ -1047,11 +1210,12 @@ function detectImmediateValidateSuccess(validatePayload) {
   return /paired|linked|activated/i.test(haystack);
 }
 
-async function validateSookaCode(code) {
+async function validateSookaCode(code, jobId = null) {
   const payload = { code };
   const response = await sookaRequest(sookaValidateEndpoint, 'POST', payload);
   if (response.ok) {
     logInfo('pairing.validate.ok', {
+      jobId,
       code,
       requestPayload: payload,
       status: response.status,
@@ -1065,6 +1229,7 @@ async function validateSookaCode(code) {
   }
 
   logError('pairing.validate.failed', {
+    jobId,
     code,
     status: response?.status,
     responseBody: response?.json || response?.text,
@@ -1076,7 +1241,7 @@ async function validateSookaCode(code) {
   };
 }
 
-async function querySookaStatus(code) {
+async function querySookaStatus(code, jobId = null) {
   const attempts = [
     () => sookaRequest(sookaStatusEndpoint, 'GET', null, { code }),
     () => sookaRequest(sookaStatusEndpoint, 'GET', null, { pairingCode: code }),
@@ -1089,6 +1254,7 @@ async function querySookaStatus(code) {
     last = result;
     if (result.ok) {
       logDebug('pairing.status.ok', {
+        jobId,
         code,
         status: result.status,
         responseBody: result.json || result.text,
@@ -1098,6 +1264,7 @@ async function querySookaStatus(code) {
   }
 
   logDebug('pairing.status.not_ready', {
+    jobId,
     code,
     status: last?.status,
     responseBody: last?.json || last?.text,
@@ -1147,7 +1314,7 @@ async function runPairing(jobId) {
   });
 
   try {
-    const validation = await validateSookaCode(code);
+    const validation = await validateSookaCode(code, jobId);
     if (!validation.ok) {
       logError('pairing.job.validate_failed', {
         jobId,
@@ -1193,7 +1360,7 @@ async function runPairing(jobId) {
 
     const deadline = Date.now() + statusTimeoutMs;
     while (Date.now() < deadline) {
-      const statusResponse = await querySookaStatus(code);
+      const statusResponse = await querySookaStatus(code, jobId);
       const statusPayload = statusResponse?.json || statusResponse?.text || null;
 
       if (!statusResponse?.ok) {
@@ -1345,11 +1512,12 @@ function parseRequestBody(req, requestId = null) {
   });
 }
 
-async function serveStatic(res, pathname) {
+async function serveStatic(res, pathname, rootDir = clientDistDir) {
   const resolvedPath = pathname === '/' ? '/index.html' : pathname;
-  const filePath = path.normalize(path.join(publicDir, resolvedPath));
+  const filePath = path.normalize(path.join(rootDir, resolvedPath));
 
-  if (!filePath.startsWith(publicDir)) {
+  const safeRootDir = rootDir.endsWith(path.sep) ? rootDir : rootDir + path.sep;
+  if (!filePath.startsWith(safeRootDir) && filePath !== rootDir) {
     sendText(res, 403, 'Forbidden');
     return true;
   }
@@ -1367,7 +1535,17 @@ async function serveStatic(res, pathname) {
   }
 }
 
+async function serveFrontendEntry(res) {
+  if (!hasClientBuild()) {
+    sendMissingClientBuild(res);
+    return true;
+  }
+
+  return serveStatic(res, '/index.html', clientDistDir);
+}
+
 const server = http.createServer(async (req, res) => {
+  res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
   const requestId = randomUUID();
   const startedAt = Date.now();
   const requestUrl = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
@@ -1400,7 +1578,7 @@ const server = http.createServer(async (req, res) => {
   };
 
   if (shouldLogPortalRequest) {
-    logInfo('portal.request.start', {
+    logDebug('portal.request.start', {
       requestId,
       method: req.method,
       path: pathname,
@@ -1413,7 +1591,7 @@ const server = http.createServer(async (req, res) => {
 
   res.on('finish', () => {
     if (shouldLogPortalRequest) {
-      logInfo('portal.request.finish', {
+      logDebug('portal.request.finish', {
         requestId,
         method: req.method,
         path: pathname,
@@ -1425,6 +1603,11 @@ const server = http.createServer(async (req, res) => {
       });
     }
   });
+
+  if (req.method === 'GET' && pathname === '/robots.txt') {
+    sendText(res, 200, 'User-agent: *\nDisallow: /\n');
+    return;
+  }
 
   if (req.method === 'POST' && pathname === '/api/auth/login') {
     try {
@@ -1483,7 +1666,7 @@ const server = http.createServer(async (req, res) => {
 
   if (!authenticatedUser) {
     if (req.method === 'GET' && (pathname === '/login' || pathname === '/login.html')) {
-      await serveStatic(res, '/login.html');
+      await serveFrontendEntry(res);
       return;
     }
 
@@ -1495,7 +1678,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (pathname.startsWith('/api/')) {
-      logError('auth.required', {
+      logDebug('auth.required', {
         requestId,
         method: req.method,
         path: pathname,
@@ -1508,7 +1691,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === 'GET' && pathname === '/') {
-      await serveStatic(res, '/login.html');
+      sendRedirect(res, '/login');
       return;
     }
 
@@ -1572,7 +1755,11 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      const next = persistSessionState(candidateResult.value);
+      const next = persistSessionState({
+        ...candidateResult.value,
+        lastVerifiedContact: verification.contact || null,
+        lastVerifiedAt: verification.contact ? now() : null,
+      });
       logInfo('session.bootstrap.persisted', {
         requestId,
         source: next.source,
@@ -1621,6 +1808,14 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
+      if (verification.contact) {
+        persistSessionState({
+          ...sessionState,
+          lastVerifiedContact: verification.contact,
+          lastVerifiedAt: now(),
+        });
+      }
+
       logInfo('session.verify.api_ok', {
         requestId,
         contact: verification.contact,
@@ -1642,6 +1837,29 @@ const server = http.createServer(async (req, res) => {
       sendJson(res, 500, {
         ok: false,
         error: 'Verification failed',
+        details: error instanceof Error ? error.message : 'Unknown error',
+      });
+      return;
+    }
+  }
+
+  if (req.method === 'POST' && pathname === '/api/session/refresh') {
+    try {
+      const result = await refreshSessionTokens(true);
+      sendJson(res, 200, {
+        ok: true,
+        refreshed: result.refreshed,
+        session: sessionSummary(),
+      });
+      return;
+    } catch (error) {
+      logError('session.refresh.api_error', {
+        requestId,
+        error,
+      });
+      sendJson(res, 400, {
+        ok: false,
+        error: 'Session refresh failed',
         details: error instanceof Error ? error.message : 'Unknown error',
       });
       return;
@@ -1677,6 +1895,43 @@ const server = http.createServer(async (req, res) => {
     }
 
     sendJson(res, 200, job);
+    return;
+  }
+
+  if (req.method === 'GET' && pathname === '/api/jobs') {
+    const items = listJobs();
+    sendJson(res, 200, {
+      items,
+      summary: {
+        total: items.length,
+        active: items.filter((job) => !job.terminal).length,
+        paired: items.filter((job) => job.stage === 'paired').length,
+        failed: items.filter((job) => ['pairing_failed', 'timed_out', 'blocked', 'rejected'].includes(job.stage)).length,
+      },
+    });
+    return;
+  }
+
+  if (req.method === 'GET' && pathname === '/api/logs') {
+    const minutes = Number(query.minutes || 60);
+    const level = typeof query.level === 'string' ? query.level.toLowerCase() : '';
+    const eventFilter = typeof query.event === 'string' ? query.event.toLowerCase() : '';
+    const items = readRecentLogs(minutes).filter((entry) => {
+      if (level && entry.level !== level) {
+        return false;
+      }
+
+      if (eventFilter && !String(entry.event || '').toLowerCase().includes(eventFilter)) {
+        return false;
+      }
+
+      return true;
+    });
+
+    sendJson(res, 200, {
+      items,
+      rangeMinutes: Math.max(1, Math.min(minutes, 60 * 24)),
+    });
     return;
   }
 
@@ -1717,6 +1972,11 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
+  if (req.method === 'GET' && (pathname === '/' || pathname === '/app')) {
+    await serveFrontendEntry(res);
+    return;
+  }
+
   const served = await serveStatic(res, pathname);
   if (served) {
     return;
@@ -1730,8 +1990,10 @@ const server = http.createServer(async (req, res) => {
   sendText(res, 404, 'Not found');
 });
 
+loadPersistedJobs();
+
 server.listen(port, () => {
-  console.log(`Sooka pairing portal listening on http://localhost:${port}`);
+  console.log(`Suka pairing portal listening on http://localhost:${port}`);
   console.log(`Portal login user: ${authUser}`);
   console.log(`App log file: ${appLogFile}`);
   logInfo('server.started', {

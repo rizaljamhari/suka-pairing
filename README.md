@@ -2,13 +2,16 @@
 
 Internal family portal for pairing a TV to a Sooka account.
 
+The portal UI is a React + Vite single-page app served by `server.mjs` from `client-dist/`.
+
 ## What is implemented
 
 - Portal login protects the site and API with an HTTP-only session cookie.
+- The authenticated app uses tabbed screens for Pairing, Session, and Logging.
 - QR image drop and pasted-code input are supported.
 - QR decoding happens in the browser when the `BarcodeDetector` API is available.
-- Pairing jobs are tracked server-side with live polling.
-- A clear adapter boundary is in place for the real Sooka session-driven pairing flow.
+- Pairing jobs are tracked server-side with live polling and recent-job history.
+- Session status includes masked token previews, expiry, verify, and refresh actions.
 - Structured logs are written to a file with `debug`, `info`, and `error` levels, including outgoing Sooka request/response headers and bodies.
 
 ## Run
@@ -23,7 +26,22 @@ Set `AUTH_USER`, `AUTH_PASSWORD`, and `APP_SESSION_SECRET` in `.env`, then run:
 npm start
 ```
 
+`npm start` now builds the React frontend and then starts the Node server.
+
 Then open `http://localhost:8787/login` and sign in with the portal credentials you configured.
+
+## Frontend workflow
+
+Production build output is written to `client-dist/`.
+
+Useful commands:
+
+```bash
+npm run build
+npm start
+```
+
+`npm run dev` still starts the Vite frontend only. Use it when working on UI code in isolation.
 
 ## Attach a persistent session
 
@@ -38,7 +56,7 @@ npm start
 
 2. Log in through the portal form. The server will set an HTTP-only session cookie so the browser stops prompting for credentials on every request.
 
-3. In portal UI, use **Attach session**.
+3. In the **Session** tab, use **Save session**.
 
 4. Paste the raw `/login` response JSON. The portal extracts `data.accessToken`,
    `data.refreshToken`, `userDetails`, and `defaultProfileId` automatically.
@@ -46,8 +64,10 @@ npm start
 5. If your authenticated Sooka requests always include extra headers, paste them into
    **Request headers JSON**. The portal merges them into every validate/status request.
 
-6. Click **Save Session**, then **Verify Session** to confirm the persisted auth works against the Sooka API.
+6. Click **Save session**, then **Verify session** to confirm the persisted auth works against the Sooka API.
    Verification now calls the contact endpoint and returns the logged-in identity when the token is valid.
+
+7. Use **Refresh token** when the saved access token is nearing expiry and you want the portal to rotate it immediately.
 
 Persisted session location defaults to `.data/sooka-session.json` (override with `SOOKA_SESSION_STORE_FILE`).
 
@@ -56,6 +76,7 @@ API endpoints for bootstrap flow:
 - `POST /api/bootstrap/session` with `{ "loginResponse": { ... }, "requestHeaders": { ... } }`
 - `POST /api/bootstrap/verify`
 - `POST /api/bootstrap/clear`
+- `POST /api/session/refresh`
 
 ### Environment variables
 
@@ -89,5 +110,6 @@ The job is marked `paired` either when Sooka validate returns an immediate succe
 
 - Keep this on a trusted home network.
 - `.env`, `.data/`, and `.logs/` should stay local and are ignored for git.
+- `APP_SESSION_SECRET` is mandatory; without it the server refuses to start.
 - Do not commit real portal credentials, session secrets, tokens, logs, or persisted session files.
 - Cookies are no longer used for API calls here; bearer auth comes from the `/login` response.
