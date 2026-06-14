@@ -169,22 +169,97 @@ function sanitizeDisplayCode(rawInput) {
   return /^[A-Z0-9]{6}$/.test(cleaned) ? cleaned : null;
 }
 
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    if (window.jsQR) {
+      resolve(window.jsQR);
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = src;
+    script.onload = () => resolve(window.jsQR);
+    script.onerror = (err) => reject(err);
+    document.head.appendChild(script);
+  });
+}
+
+function readImageToCanvas(file) {
+  return new Promise((resolve, reject) => {
+    if (typeof window.createImageBitmap === 'function') {
+      createImageBitmap(file)
+        .then((bitmap) => {
+          const canvas = document.createElement('canvas');
+          canvas.width = bitmap.width;
+          canvas.height = bitmap.height;
+          const context = canvas.getContext('2d');
+          context.drawImage(bitmap, 0, 0);
+          resolve(canvas);
+        })
+        .catch(() => {
+          fallback();
+        });
+    } else {
+      fallback();
+    }
+
+    function fallback() {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          canvas.width = img.width;
+          canvas.height = img.height;
+          const context = canvas.getContext('2d');
+          context.drawImage(img, 0, 0);
+          resolve(canvas);
+        };
+        img.onerror = (err) => reject(err);
+        img.src = e.target.result;
+      };
+      reader.onerror = (err) => reject(err);
+      reader.readAsDataURL(file);
+    }
+  });
+}
+
 async function detectQrCode(file) {
-  if (!file || !('BarcodeDetector' in window)) {
+  if (!file) {
     return null;
   }
 
+  let canvas;
   try {
-    const detector = new BarcodeDetector({ formats: ['qr_code'] });
-    const bitmap = await createImageBitmap(file);
-    const canvas = document.createElement('canvas');
-    canvas.width = bitmap.width;
-    canvas.height = bitmap.height;
+    canvas = await readImageToCanvas(file);
+  } catch (err) {
+    console.error('Failed to load image to canvas:', err);
+    return null;
+  }
+
+  if ('BarcodeDetector' in window) {
+    try {
+      const detector = new BarcodeDetector({ formats: ['qr_code'] });
+      const results = await detector.detect(canvas);
+      if (results[0]?.rawValue) {
+        return results[0].rawValue;
+      }
+    } catch (err) {
+      console.warn('Native BarcodeDetector failed, trying fallback:', err);
+    }
+  }
+
+  try {
+    const jsQR = await loadScript('https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js');
+    if (!jsQR) {
+      return null;
+    }
+
     const context = canvas.getContext('2d');
-    context.drawImage(bitmap, 0, 0);
-    const results = await detector.detect(canvas);
-    return results[0]?.rawValue || null;
-  } catch {
+    const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+    const result = jsQR(imageData.data, imageData.width, imageData.height);
+    return result?.data || null;
+  } catch (error) {
+    console.error('jsQR fallback failed:', error);
     return null;
   }
 }
