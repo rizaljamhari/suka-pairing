@@ -967,7 +967,7 @@ function PortalPage() {
               <CardContent className="space-y-6">
                 <div className="space-y-2">
                   <div className="flex items-center justify-between text-sm text-muted-foreground">
-                    <span>{job ? activeJobText : 'Idle'}</span>
+                    <span>{job ? `${activeJobText}${job.deviceName ? ` (${job.deviceName})` : ''}` : 'Idle'}</span>
                     <span>{job?.progress || 0}%</span>
                   </div>
                   <div className="h-3 overflow-hidden rounded-full bg-secondary">
@@ -1046,7 +1046,10 @@ function PortalPage() {
                     <div className="flex flex-wrap items-center gap-2">
                       <Badge variant={toneFromJob(entry.stage)}>{entry.stage.replaceAll('_', ' ')}</Badge>
                       <p className="text-sm font-semibold">{entry.code || '—'}</p>
-                      <p className="text-xs text-muted-foreground">{formatDateTime(entry.updatedAt)}</p>
+                      {entry.deviceName && (
+                        <span className="text-xs text-muted-foreground">• {entry.deviceName}</span>
+                      )}
+                      <p className="text-xs text-muted-foreground">• {formatDateTime(entry.updatedAt)}</p>
                     </div>
                     <Button type="button" variant="outline" size="sm" onClick={() => openJobFromHistory(entry.id)}>
                       {entry.terminal ? 'View' : 'Monitor'}

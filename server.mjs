@@ -47,6 +47,78 @@ const statusTimeoutMs = Number(process.env.SOOKA_STATUS_TIMEOUT_MS || 90000);
 const successRegex = new RegExp(process.env.SOOKA_STATUS_SUCCESS_REGEX || 'paired|success|linked|activated', 'i');
 const failureRegex = new RegExp(process.env.SOOKA_STATUS_FAILURE_REGEX || 'failed|invalid|expired|denied|forbidden|error', 'i');
 
+const ntfyTopic = process.env.NTFY_TOPIC || '';
+const ntfyUrl = (process.env.NTFY_URL || 'https://ntfy.sh').replace(/\/$/, '');
+const ntfyToken = process.env.NTFY_TOKEN || '';
+
+function extractDeviceName(payload) {
+  if (!payload) return 'Unknown Device';
+  let obj = payload;
+  if (typeof payload === 'string') {
+    try {
+      obj = JSON.parse(payload);
+    } catch {
+      return 'Unknown Device';
+    }
+  }
+  if (typeof obj === 'object' && obj !== null) {
+    if (obj.deviceName) return String(obj.deviceName);
+    if (obj.device_name) return String(obj.device_name);
+    if (obj.data && typeof obj.data === 'object' && obj.data !== null) {
+      if (obj.data.deviceName) return String(obj.data.deviceName);
+      if (obj.data.device_name) return String(obj.data.device_name);
+    }
+    if (typeof obj.message === 'string') {
+      const match = obj.message.match(/^(.+?)\s+(?:Paired|Successfully|Failed|linked|activated)/i);
+      if (match && match[1]) {
+        return match[1].trim();
+      }
+      return obj.message.replace(/\s+Paired\s+Successfully/i, '').trim();
+    }
+  }
+  return 'Unknown Device';
+}
+
+async function sendNtfyNotification(title, message, tags = '') {
+  if (!ntfyTopic) {
+    return;
+  }
+
+  const url = `${ntfyUrl}/${ntfyTopic}`;
+  const headers = {
+    'Title': title,
+  };
+  if (tags) {
+    headers['Tags'] = tags;
+  }
+  if (ntfyToken) {
+    headers['Authorization'] = `Bearer ${ntfyToken}`;
+  }
+
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: message,
+    });
+    if (!res.ok) {
+      logError('ntfy.send.failed', {
+        status: res.status,
+        statusText: res.statusText,
+      });
+    } else {
+      logInfo('ntfy.send.ok', {
+        title,
+        message,
+      });
+    }
+  } catch (error) {
+    logError('ntfy.send.error', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
 const jobs = new Map();
 
 function loadPersistedJobs() {
@@ -1293,6 +1365,11 @@ async function runPairing(jobId) {
       message: 'The provided input did not contain a valid 6-character pairing code.',
       result: 'invalid_code',
     });
+    sendNtfyNotification(
+      'TV Pairing Rejected ❌',
+      `Reason: The provided input did not contain a valid 6-character pairing code.`,
+      'x,tv'
+    );
     return;
   }
 
@@ -1337,10 +1414,18 @@ async function runPairing(jobId) {
         result: 'validate_failed',
         resultDetails: compactPreview(validation.response?.json || validation.response?.text),
       });
+      sendNtfyNotification(
+        'TV Pairing Failed ❌',
+        `TV Code: ${code}\nDevice: Unknown Device\n\nSooka validation failed (HTTP ${validation.response?.status || 'n/a'}).`,
+        'x,tv'
+      );
       return;
     }
 
     const validationPayload = validation.response?.json || validation.response?.text || null;
+    const deviceName = extractDeviceName(validationPayload);
+    updateJob(jobId, { deviceName });
+
     if (detectImmediateValidateSuccess(validationPayload)) {
       logInfo('pairing.job.paired_immediately', {
         jobId,
@@ -1355,6 +1440,11 @@ async function runPairing(jobId) {
         result: 'paired',
         resultDetails: compactPreview(validationPayload),
       });
+      sendNtfyNotification(
+        'TV Paired Successfully 🎉',
+        `TV Code: ${code}\nDevice: ${deviceName}\n\nSuccessfully paired with Suka immediately from validation response.`,
+        'heavy_check_mark,tv'
+      );
       return;
     }
 
@@ -1402,6 +1492,11 @@ async function runPairing(jobId) {
           result: 'paired',
           resultDetails: compactPreview(statusPayload),
         });
+        sendNtfyNotification(
+          'TV Paired Successfully 🎉',
+          `TV Code: ${code}\nDevice: ${deviceName}\n\nTV pairing confirmed successfully by Sooka status.`,
+          'heavy_check_mark,tv'
+        );
         return;
       }
 
@@ -1419,6 +1514,11 @@ async function runPairing(jobId) {
           result: 'pairing_failed',
           resultDetails: compactPreview(statusPayload),
         });
+        sendNtfyNotification(
+          'TV Pairing Failed ❌',
+          `TV Code: ${code}\nDevice: ${deviceName}\n\nSooka status returned a terminal failure state.`,
+          'x,tv'
+        );
         return;
       }
 
@@ -1443,6 +1543,11 @@ async function runPairing(jobId) {
       code,
       timeoutMs: statusTimeoutMs,
     });
+    sendNtfyNotification(
+      'TV Pairing Timed Out ⚠️',
+      `TV Code: ${code}\nDevice: ${deviceName}\n\nTimed out waiting for Sooka status confirmation.`,
+      'warning,tv'
+    );
   } catch (error) {
     logError('pairing.job.integration_error', {
       jobId,
@@ -1457,6 +1562,12 @@ async function runPairing(jobId) {
       result: 'integration_error',
       resultDetails: error instanceof Error ? error.message : String(error),
     });
+    const currentDeviceName = jobs.get(jobId)?.deviceName || 'Unknown Device';
+    sendNtfyNotification(
+      'TV Pairing Error ❌',
+      `TV Code: ${code}\nDevice: ${currentDeviceName}\n\nUnexpected error: ${error instanceof Error ? error.message : String(error)}`,
+      'x,tv'
+    );
   }
 }
 

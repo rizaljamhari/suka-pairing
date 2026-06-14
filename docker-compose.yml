@@ -24,6 +24,9 @@ services:
       - SOOKA_STATUS_TIMEOUT_MS=90000
       - SOOKA_STATUS_SUCCESS_REGEX=paired|success|linked|activated
       - SOOKA_STATUS_FAILURE_REGEX=failed|invalid|expired|denied|forbidden|error
+      - NTFY_TOPIC=${NTFY_TOPIC:-}
+      - NTFY_URL=${NTFY_URL:-https://ntfy.sh}
+      - NTFY_TOKEN=${NTFY_TOKEN:-}
     volumes:
       - suka_data:/app/.data
       - suka_logs:/app/.logs
