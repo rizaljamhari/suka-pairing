@@ -1172,7 +1172,32 @@ async function verifySessionCandidate(candidate) {
     hasRefreshToken: Boolean(candidate?.refreshToken),
     headerKeys: Object.keys(candidate?.requestHeaders || {}),
   });
-  const probe = await sookaRequest(sookaContactEndpoint, 'GET', null, null, candidate);
+
+  if (candidate === sessionState && sessionState.refreshToken) {
+    try {
+      const refreshResult = await refreshSessionTokens(false);
+      candidate = refreshResult.session;
+    } catch (error) {
+      logError('session.verify.preflight_refresh_failed', { error: error.message });
+    }
+  }
+
+  let probe = await sookaRequest(sookaContactEndpoint, 'GET', null, null, candidate);
+
+  if (
+    (probe.status === 401 || probe.status === 403) &&
+    candidate === sessionState &&
+    sessionState.refreshToken
+  ) {
+    logInfo('session.verify.retry_on_auth_failure_verify');
+    try {
+      const refreshResult = await refreshSessionTokens(true);
+      candidate = refreshResult.session;
+      probe = await sookaRequest(sookaContactEndpoint, 'GET', null, null, candidate);
+    } catch (error) {
+      logError('session.verify.retry_refresh_failed', { error: error.message });
+    }
+  }
 
   if (probe.status === 401 || probe.status === 403) {
     logError('session.verify.rejected', {
