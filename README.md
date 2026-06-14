@@ -1,6 +1,12 @@
-# Sooka Pairing Portal
+# Suka Pairing Portal
 
-Internal family portal for pairing a TV to a Sooka account.
+Internal family portal for pairing a TV to a Suka (read as Sooka) account.
+
+## Why this exists (Motivation)
+
+I share one streaming account across multiple households for family members. They often need to pair their smart TVs at different times. Previously, they had to ask me directly, which meant they had to wait if I was busy or offline. 
+
+This self-service portal allows family members to input their TV pairing code (or scan/upload a QR screenshot) and pair their devices independently, without needing my active intervention.
 
 The portal UI is a React + Vite single-page app served by `server.mjs` from `client-dist/`.
 
