@@ -14,17 +14,21 @@ services:
       - APP_LOG_FILE=${APP_LOG_FILE:-.logs/portal.log}
       - APP_LOG_LEVEL=${APP_LOG_LEVEL:-info}
       - APP_JOBS_FILE=${APP_JOBS_FILE:-.data/jobs.jsonl}
-      - SOOKA_APP_URL=${SOOKA_APP_URL:-https://sooka.my}
-      - SOOKA_API_BASE_URL=${SOOKA_API_BASE_URL:-https://api.vr.ctrp.sooka.my}
-      - SOOKA_PAIR_TV_URL=${SOOKA_PAIR_TV_URL:-https://sooka.my/pair-tv}
-      - SOOKA_VALIDATE_ENDPOINT=${SOOKA_VALIDATE_ENDPOINT:-/login/v1/smart-tv/validate}
-      - SOOKA_STATUS_ENDPOINT=${SOOKA_STATUS_ENDPOINT:-/login/pub/v1/smart-tv/status}
-      - SOOKA_SESSION_STORE_FILE=${SOOKA_SESSION_STORE_FILE:-.data/sooka-session.json}
-      - SOOKA_STATUS_POLL_INTERVAL_MS=${SOOKA_STATUS_POLL_INTERVAL_MS:-1800}
-      - SOOKA_STATUS_TIMEOUT_MS=${SOOKA_STATUS_TIMEOUT_MS:-90000}
-      - SOOKA_STATUS_SUCCESS_REGEX=${SOOKA_STATUS_SUCCESS_REGEX:-paired|success|linked|activated}
-      - SOOKA_STATUS_FAILURE_REGEX=${SOOKA_STATUS_FAILURE_REGEX:-failed|invalid|expired|denied|forbidden|error}
+      - SOOKA_APP_URL=https://sooka.my
+      - SOOKA_API_BASE_URL=https://api.vr.ctrp.sooka.my
+      - SOOKA_PAIR_TV_URL=https://sooka.my/pair-tv
+      - SOOKA_VALIDATE_ENDPOINT=/login/v1/smart-tv/validate
+      - SOOKA_STATUS_ENDPOINT=/login/pub/v1/smart-tv/status
+      - SOOKA_SESSION_STORE_FILE=.data/sooka-session.json
+      - SOOKA_STATUS_POLL_INTERVAL_MS=1800
+      - SOOKA_STATUS_TIMEOUT_MS=90000
+      - SOOKA_STATUS_SUCCESS_REGEX=paired|success|linked|activated
+      - SOOKA_STATUS_FAILURE_REGEX=failed|invalid|expired|denied|forbidden|error
     volumes:
-      - ./data:/app/.data
-      - ./logs:/app/.logs
+      - suka_data:/app/.data
+      - suka_logs:/app/.logs
     restart: unless-stopped
+
+volumes:
+  suka_data:
+  suka_logs:
