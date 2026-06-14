@@ -39,7 +39,7 @@ function labelFromSession(session) {
   }
 
   if (session.verificationFailed) {
-    return 'Verification failed. Please update your Sooka session';
+    return 'Verification failed';
   }
 
   if (session.refreshRecommended) {
