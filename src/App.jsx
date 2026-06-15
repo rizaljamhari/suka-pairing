@@ -1091,7 +1091,7 @@ function PortalPage() {
                     <p className="text-sm font-semibold">Activity console</p>
                     <Badge variant={toneFromJob(job?.stage)}>{job ? activeJobText : 'idle'}</Badge>
                   </div>
-                  <pre className="min-h-48 overflow-x-auto rounded-[1.5rem] border border-border/70 bg-slate-950 p-4 text-sm leading-6 text-slate-100">{activityLog}</pre>
+                  <pre className="min-h-48 whitespace-pre-wrap break-words rounded-[1.5rem] border border-border/70 bg-slate-950 p-4 text-sm leading-6 text-slate-100">{activityLog}</pre>
                 </div>
               </CardContent>
             </Card>
