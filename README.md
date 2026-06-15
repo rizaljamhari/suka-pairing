@@ -28,7 +28,7 @@ docker-compose up -d --build
    ```bash
    cp .env.example .env
    ```
-2. Configure `AUTH_USER`, `AUTH_PASSWORD`, and `APP_SESSION_SECRET` in `.env`.
+2. Configure `AUTH_USER`, `AUTH_PASSWORD`, `ADMIN_USER`, `ADMIN_PASSWORD`, and `APP_SESSION_SECRET` in `.env`.
 3. Start the application:
    ```bash
    npm start
@@ -42,8 +42,10 @@ docker-compose up -d --build
 The application can be configured using the following environment variables in `.env`:
 
 - `PORT=8787` - Server port
-- `AUTH_USER=...` - Required portal login username
-- `AUTH_PASSWORD=...` - Required portal login password
+- `AUTH_USER=...` - Required standard portal login username
+- `AUTH_PASSWORD=...` - Required standard portal login password
+- `ADMIN_USER=...` - Required admin portal login username
+- `ADMIN_PASSWORD=...` - Required admin portal login password
 - `APP_SESSION_SECRET=...` - Required random secret used to sign session cookies
 - `APP_SESSION_TTL_DAYS=30` - Portal session duration in days
 - `APP_LOG_LEVEL=info` - Log level (`debug`, `info`, `error`)
@@ -51,8 +53,23 @@ The application can be configured using the following environment variables in `
 
 ---
 
+## User Roles & Permissions
+
+The portal supports two user roles to facilitate secure sharing with family members:
+
+| Action / Access | Admin (`ADMIN_USER`) | Standard (`AUTH_USER`) |
+| --- | --- | --- |
+| **TV Pairing** | Yes | Yes |
+| **View Session Status** | Yes | Yes |
+| **Trigger Session Verification** | Yes | Yes |
+| **Update Sooka Session Credentials** | Yes | No (Hidden) |
+| **Purge Pairing History** | Yes | No (Hidden) |
+| **View System Logs** | Yes | No (Hidden) |
+
+---
+
 ## Notes
-- **Internet Exposure & Security Warning**: If you choose to expose this portal to the public internet (e.g., to allow family members to access it from their homes), **make sure you know what you are doing**. Since this portal stores a valid, active Sooka streaming session (under `./data`), anyone who accesses the portal gains control over your session. Ensure you configure a very strong `AUTH_USER` and `AUTH_PASSWORD`, and serve it over HTTPS (e.g., behind a secure reverse proxy).
+- **Internet Exposure & Security Warning**: If you choose to expose this portal to the public internet (e.g., to allow family members to access it from their homes), **make sure you know what you are doing**. Since this portal stores a valid, active Sooka streaming session (under `./data`), anyone who accesses the portal gains control over your session. Ensure you configure very strong credentials (especially for `ADMIN_USER` and `ADMIN_PASSWORD`), and serve it over HTTPS (e.g., behind a secure reverse proxy).
 - Keep this on a trusted home network if not exposing it.
 - `.env`, `./data`, and `./logs` are ignored by git and should stay local.
 - Never commit credentials or session tokens to the repository.

@@ -22,6 +22,8 @@ function getRequiredEnv(name) {
 const port = Number(process.env.PORT || 8787);
 const authUser = getRequiredEnv('AUTH_USER');
 const authPassword = getRequiredEnv('AUTH_PASSWORD');
+const adminUser = getRequiredEnv('ADMIN_USER');
+const adminPassword = getRequiredEnv('ADMIN_PASSWORD');
 const appSessionSecret = getRequiredEnv('APP_SESSION_SECRET');
 const appSessionTtlDays = Number(process.env.APP_SESSION_TTL_DAYS || 30);
 const sessionCookieName = process.env.APP_SESSION_COOKIE_NAME || 'sooka_portal_session';
@@ -804,7 +806,7 @@ function verifySessionToken(token) {
 
   try {
     const payload = JSON.parse(Buffer.from(encoded, 'base64url').toString('utf8'));
-    if (!payload || payload.u !== authUser || typeof payload.exp !== 'number') {
+    if (!payload || (payload.u !== authUser && payload.u !== adminUser) || typeof payload.exp !== 'number') {
       return null;
     }
 
@@ -1701,6 +1703,7 @@ const server = http.createServer(async (req, res) => {
   const { pathname } = requestUrl;
   const query = Object.fromEntries(requestUrl.searchParams.entries());
   const authenticatedUser = getAuthenticatedUser(req);
+  const isAdmin = authenticatedUser === adminUser;
   const shouldLogPortalRequest = !isStaticAssetPath(pathname);
   let responseHeaders = {};
   let responseBody = '';
@@ -1764,7 +1767,10 @@ const server = http.createServer(async (req, res) => {
       const username = typeof body.username === 'string' ? body.username.trim() : '';
       const password = typeof body.password === 'string' ? body.password : '';
 
-      if (username !== authUser || password !== authPassword) {
+      const isAuthUser = username === authUser && password === authPassword;
+      const isAdminUser = username === adminUser && password === adminPassword;
+
+      if (!isAuthUser && !isAdminUser) {
         logError('auth.login.invalid_credentials', {
           requestId,
           username,
@@ -1856,6 +1862,7 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'GET' && pathname === '/api/me') {
     sendJson(res, 200, {
       user: authenticatedUser,
+      role: authenticatedUser === adminUser ? 'admin' : 'user',
       openJobs: [...jobs.values()].filter((job) => !job.terminal).length,
       session: sessionSummary(),
     });
@@ -1901,6 +1908,10 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (req.method === 'POST' && pathname === '/api/bootstrap/session') {
+    if (!isAdmin) {
+      sendJson(res, 403, { error: 'Forbidden', details: 'Admin access required.' });
+      return;
+    }
     try {
       const body = await parseRequestBody(req, requestId);
       const candidateResult = buildSessionCandidate(body);
@@ -2029,6 +2040,10 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (req.method === 'POST' && pathname === '/api/session/refresh') {
+    if (!isAdmin) {
+      sendJson(res, 403, { error: 'Forbidden', details: 'Admin access required.' });
+      return;
+    }
     try {
       const result = await refreshSessionTokens(true);
       sendJson(res, 200, {
@@ -2058,6 +2073,10 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (req.method === 'POST' && pathname === '/api/bootstrap/clear') {
+    if (!isAdmin) {
+      sendJson(res, 403, { error: 'Forbidden', details: 'Admin access required.' });
+      return;
+    }
     const next = clearPersistedSessionState();
     logInfo('session.clear', {
       requestId,
@@ -2104,6 +2123,10 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (req.method === 'POST' && pathname === '/api/jobs/purge') {
+    if (!isAdmin) {
+      sendJson(res, 403, { error: 'Forbidden', details: 'Admin access required.' });
+      return;
+    }
     jobs.clear();
     try {
       writeFileSync(jobsStoreFile, '', 'utf8');
@@ -2117,6 +2140,10 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (req.method === 'GET' && pathname === '/api/logs') {
+    if (!isAdmin) {
+      sendJson(res, 403, { error: 'Forbidden', details: 'Admin access required.' });
+      return;
+    }
     const minutes = Number(query.minutes || 60);
     const level = typeof query.level === 'string' ? query.level.toLowerCase() : '';
     const eventFilter = typeof query.event === 'string' ? query.event.toLowerCase() : '';
@@ -2198,11 +2225,13 @@ loadPersistedJobs();
 
 server.listen(port, () => {
   console.log(`Suka pairing portal listening on http://localhost:${port}`);
-  console.log(`Portal login user: ${authUser}`);
+  console.log(`Portal standard user: ${authUser}`);
+  console.log(`Portal admin user: ${adminUser}`);
   console.log(`App log file: ${appLogFile}`);
   logInfo('server.started', {
     port,
     user: authUser,
+    admin: adminUser,
     logFile: appLogFile,
     logLevel: appLogLevel,
   });

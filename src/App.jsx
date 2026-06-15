@@ -426,6 +426,7 @@ function PortalPage() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('pairing');
   const [authUser, setAuthUser] = useState(null);
+  const [userRole, setUserRole] = useState('user');
   const [session, setSession] = useState(null);
   const [contact, setContact] = useState(null);
   const [pairInput, setPairInput] = useState('');
@@ -503,6 +504,7 @@ function PortalPage() {
     }
 
     setAuthUser(me.user);
+    setUserRole(me.role || 'user');
     setSession(bootstrap.session || me.session);
     setContact(bootstrap.session?.lastVerifiedContact || me.session?.lastVerifiedContact || null);
     setSessionLastRefreshedAt(new Date().toISOString());
@@ -558,18 +560,30 @@ function PortalPage() {
 
     async function boot() {
       try {
-        const [, jobsPayload, logsPayload] = await Promise.all([
-          refreshSessionStatus(),
-          refreshJobs(),
-          refreshLogs(),
-        ]);
+        const { me } = await refreshSessionStatus();
+        const promises = [refreshJobs()];
+        const isAdmin = (me?.role === 'admin');
+
+        if (isAdmin) {
+          promises.push(refreshLogs());
+        } else {
+          setAutoRefreshLogs(false);
+        }
+
+        const results = await Promise.all(promises);
+        const jobsPayload = results[0];
+        const logsPayload = results[1];
 
         if (ignore) {
           return;
         }
 
         setJobs(jobsPayload.items || []);
-        setLogs(logsPayload.items || []);
+        if (logsPayload) {
+          setLogs(logsPayload.items || []);
+        } else {
+          setLogs([]);
+        }
         setActivityLog('Ready. Paste the TV code or upload a QR screenshot to start pairing.');
       } catch (error) {
         if (!ignore) {
@@ -614,7 +628,7 @@ function PortalPage() {
   }, [activeTab, navigate]);
 
   useEffect(() => {
-    if (activeTab !== 'logging' || !autoRefreshLogs) {
+    if (activeTab !== 'logging' || !autoRefreshLogs || userRole !== 'admin') {
       return undefined;
     }
 
@@ -938,7 +952,7 @@ function PortalPage() {
         <TabsList>
           <TabsTrigger value="pairing">Pairing</TabsTrigger>
           <TabsTrigger value="session">Session</TabsTrigger>
-          <TabsTrigger value="logging">Logging</TabsTrigger>
+          {userRole === 'admin' && <TabsTrigger value="logging">Logging</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="pairing">
@@ -1085,9 +1099,11 @@ function PortalPage() {
                   <Badge variant="neutral">{jobsSummary.total} total</Badge>
                   <Badge variant="ok">{jobsSummary.paired} paired</Badge>
                   {jobsSummary.failed > 0 && <Badge variant="danger">{jobsSummary.failed} failed</Badge>}
-                  <Button type="button" variant="destructive" size="sm" onClick={handlePurgeHistory} title="Purge history">
-                    <Trash2 className="h-3 w-3" />
-                  </Button>
+                  {userRole === 'admin' && (
+                    <Button type="button" variant="destructive" size="sm" onClick={handlePurgeHistory} title="Purge history">
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  )}
                   <Button type="button" variant="outline" size="sm" onClick={refreshJobs}><RefreshCcw className="h-3 w-3" /></Button>
                 </div>
               </div>
@@ -1117,8 +1133,136 @@ function PortalPage() {
         </TabsContent>
 
         <TabsContent value="session">
-          <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
-            <div className="space-y-6">
+          {userRole === 'admin' ? (
+            <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
+              <div className="space-y-6">
+                <Card>
+                  <CardHeader>
+                    <div className="flex items-center gap-3">
+                      <CardTitle>Session</CardTitle>
+                      <Badge variant={sessionTone}>{sessionLabel}</Badge>
+                      <Badge variant="neutral">{session?.source || 'no source'}</Badge>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <dl className="grid gap-4 sm:grid-cols-2">
+                      <StatusItem label="Account" value={contact?.name || contact?.email || 'Not verified'} />
+                      <StatusItem label="Customer ID" value={session?.customerId || '—'} />
+                      <StatusItem label="Valid until" value={session?.accessTokenExpiresAt ? `${formatDateTime(session.accessTokenExpiresAt)} (${formatDuration(sessionCountdownMs)} left)` : '—'} />
+                      <StatusItem label="Updated" value={formatDateTime(session?.updatedAt || session?.savedAt)} />
+                      <StatusItem label="Access token" value={session?.accessTokenPreview || 'Missing'} />
+                      <StatusItem label="Refresh token" value={session?.refreshTokenPreview || 'Missing'} />
+                    </dl>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-sm font-semibold">How to get session data</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4 text-xs leading-relaxed text-muted-foreground">
+                    <ol className="list-decimal pl-4 space-y-3">
+                      <li>
+                        Go to the <strong>Sooka website</strong> (do not log in yet).
+                      </li>
+                      <li>
+                        Press <kbd className="px-1.5 py-0.5 rounded bg-muted text-foreground border border-border">F12</kbd> (or right-click and choose <strong>Inspect</strong>) to open Developer Tools, and switch to the <strong>Network</strong> tab.
+                      </li>
+                      <li>
+                        Perform the log in procedure so that the network request is recorded in real-time. Then search/filter for <code className="text-foreground bg-muted px-1 rounded font-mono">login</code> or <code className="text-foreground bg-muted px-1 rounded font-mono">tokens</code> in the network list.
+                      </li>
+                      <li>
+                        Look for the corresponding requests in the list:
+                        <ul className="list-disc pl-4 mt-2 space-y-1.5">
+                          <li>
+                            <strong>Login Response JSON</strong>: Find the <code className="text-foreground font-semibold">/login</code> request, and copy the entire JSON body from its <strong>Response</strong> tab.
+                          </li>
+                          <li>
+                            <strong>Request Headers JSON</strong>: Find the <code className="text-foreground font-semibold">/login/v1/contact</code> request, copy its Request Headers from the <strong>Headers</strong> tab, and convert them to JSON format.
+                            <p className="mt-1 text-[10px] text-amber-400 leading-normal">
+                              <strong>Note:</strong> The <code>Authorization</code> header is automatically populated using the <code>accessToken</code> from the Login Response. You do not need to manually specify it in the Request Headers JSON.
+                            </p>
+                          </li>
+                        </ul>
+                      </li>
+                    </ol>
+                    <div className="mt-4 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-[11px] leading-relaxed text-rose-400">
+                      <strong>Important:</strong> Do not log out of Sooka or remove the browser session from Sooka's device management settings. Doing so will immediately invalidate the token, causing the pairing portal to lose access.
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Update session</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <form className="space-y-5" onSubmit={saveSession}>
+                    <div>
+                      <label className="label" htmlFor="login-response">Login response JSON</label>
+                      <Textarea
+                        id="login-response"
+                        rows={9}
+                        value={loginResponse}
+                        onChange={(event) => setLoginResponse(event.target.value)}
+                        disabled={sessionBusy}
+                        placeholder={JSON.stringify({
+                          status: true,
+                          message: "Login Successful",
+                          data: {
+                            accessToken: "YOUR_ACCESS_TOKEN",
+                            refreshToken: "YOUR_REFRESH_TOKEN",
+                            userDetails: {
+                              customerId: "YOUR_CUSTOMER_ID",
+                              campaignId: "MAIN"
+                            },
+                            defaultProfileId: 123456
+                          },
+                          successCode: "#SUC-100-155"
+                        }, null, 2)}
+                      />
+                    </div>
+                    <div>
+                      <label className="label" htmlFor="request-headers">Request headers JSON (optional)</label>
+                      <Textarea
+                        id="request-headers"
+                        rows={7}
+                        value={requestHeaders}
+                        onChange={(event) => setRequestHeaders(event.target.value)}
+                        disabled={sessionBusy}
+                        placeholder={JSON.stringify({
+                          "cp_id": "YOUR_CP_ID",
+                          "device_id": "YOUR_DEVICE_ID",
+                          "environmentcode": "MAIN",
+                          "language": "eng",
+                          "languagecode": "eng",
+                          "local": "MYS",
+                          "origin": "https://sooka.my",
+                          "platform": "WEB",
+                          "pragma": "no-cache",
+                          "priority": "u=1, i",
+                          "profileid": "YOUR_PROFILE_ID",
+                          "referer": "https://sooka.my/",
+                          "requestcount": "1",
+                          "tenant_identifier": "master",
+                          "user-agent": "YOUR_USER_AGENT",
+                          "x-api-key": "YOUR_API_KEY"
+                        }, null, 2)}
+                      />
+                    </div>
+                    <div className="flex flex-wrap gap-3">
+                      <Button disabled={sessionBusy} type="submit">Save session</Button>
+                      <Button disabled={sessionBusy} type="button" variant="outline" onClick={verifySession}>Verify session</Button>
+                      <Button disabled={sessionBusy} type="button" variant="outline" onClick={refreshSessionToken}>Refresh token</Button>
+                      <Button disabled={sessionBusy} type="button" variant="ghost" onClick={clearSession}>Clear session</Button>
+                    </div>
+                  </form>
+                </CardContent>
+              </Card>
+            </div>
+          ) : (
+            <div className="max-w-xl mx-auto w-full">
               <Card>
                 <CardHeader>
                   <div className="flex items-center gap-3">
@@ -1136,114 +1280,13 @@ function PortalPage() {
                     <StatusItem label="Access token" value={session?.accessTokenPreview || 'Missing'} />
                     <StatusItem label="Refresh token" value={session?.refreshTokenPreview || 'Missing'} />
                   </dl>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-sm font-semibold">How to get session data</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4 text-xs leading-relaxed text-muted-foreground">
-                  <ol className="list-decimal pl-4 space-y-3">
-                    <li>
-                      Go to the <strong>Sooka website</strong> (do not log in yet).
-                    </li>
-                    <li>
-                      Press <kbd className="px-1.5 py-0.5 rounded bg-muted text-foreground border border-border">F12</kbd> (or right-click and choose <strong>Inspect</strong>) to open Developer Tools, and switch to the <strong>Network</strong> tab.
-                    </li>
-                    <li>
-                      Perform the log in procedure so that the network request is recorded in real-time. Then search/filter for <code className="text-foreground bg-muted px-1 rounded font-mono">login</code> or <code className="text-foreground bg-muted px-1 rounded font-mono">tokens</code> in the network list.
-                    </li>
-                    <li>
-                      Look for the corresponding requests in the list:
-                      <ul className="list-disc pl-4 mt-2 space-y-1.5">
-                        <li>
-                          <strong>Login Response JSON</strong>: Find the <code className="text-foreground font-semibold">/login</code> request, and copy the entire JSON body from its <strong>Response</strong> tab.
-                        </li>
-                        <li>
-                          <strong>Request Headers JSON</strong>: Find the <code className="text-foreground font-semibold">/login/v1/contact</code> request, copy its Request Headers from the <strong>Headers</strong> tab, and convert them to JSON format.
-                          <p className="mt-1 text-[10px] text-amber-400 leading-normal">
-                            <strong>Note:</strong> The <code>Authorization</code> header is automatically populated using the <code>accessToken</code> from the Login Response. You do not need to manually specify it in the Request Headers JSON.
-                          </p>
-                        </li>
-                      </ul>
-                    </li>
-                  </ol>
-                  <div className="mt-4 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-[11px] leading-relaxed text-rose-400">
-                    <strong>Important:</strong> Do not log out of Sooka or remove the browser session from Sooka's device management settings. Doing so will immediately invalidate the token, causing the pairing portal to lose access.
+                  <div className="pt-2">
+                    <Button disabled={sessionBusy} type="button" variant="outline" onClick={verifySession}>Verify session</Button>
                   </div>
                 </CardContent>
               </Card>
             </div>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Update session</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <form className="space-y-5" onSubmit={saveSession}>
-                  <div>
-                    <label className="label" htmlFor="login-response">Login response JSON</label>
-                    <Textarea
-                      id="login-response"
-                      rows={9}
-                      value={loginResponse}
-                      onChange={(event) => setLoginResponse(event.target.value)}
-                      disabled={sessionBusy}
-                      placeholder={JSON.stringify({
-                        status: true,
-                        message: "Login Successful",
-                        data: {
-                          accessToken: "YOUR_ACCESS_TOKEN",
-                          refreshToken: "YOUR_REFRESH_TOKEN",
-                          userDetails: {
-                            customerId: "YOUR_CUSTOMER_ID",
-                            campaignId: "MAIN"
-                          },
-                          defaultProfileId: 123456
-                        },
-                        successCode: "#SUC-100-155"
-                      }, null, 2)}
-                    />
-                  </div>
-                  <div>
-                    <label className="label" htmlFor="request-headers">Request headers JSON (optional)</label>
-                    <Textarea
-                      id="request-headers"
-                      rows={7}
-                      value={requestHeaders}
-                      onChange={(event) => setRequestHeaders(event.target.value)}
-                      disabled={sessionBusy}
-                      placeholder={JSON.stringify({
-                        "cp_id": "YOUR_CP_ID",
-                        "device_id": "YOUR_DEVICE_ID",
-                        "environmentcode": "MAIN",
-                        "language": "eng",
-                        "languagecode": "eng",
-                        "local": "MYS",
-                        "origin": "https://sooka.my",
-                        "platform": "WEB",
-                        "pragma": "no-cache",
-                        "priority": "u=1, i",
-                        "profileid": "YOUR_PROFILE_ID",
-                        "referer": "https://sooka.my/",
-                        "requestcount": "1",
-                        "tenant_identifier": "master",
-                        "user-agent": "YOUR_USER_AGENT",
-                        "x-api-key": "YOUR_API_KEY"
-                      }, null, 2)}
-                    />
-                  </div>
-                  <div className="flex flex-wrap gap-3">
-                    <Button disabled={sessionBusy} type="submit">Save session</Button>
-                    <Button disabled={sessionBusy} type="button" variant="outline" onClick={verifySession}>Verify session</Button>
-                    <Button disabled={sessionBusy} type="button" variant="outline" onClick={refreshSessionToken}>Refresh token</Button>
-                    <Button disabled={sessionBusy} type="button" variant="ghost" onClick={clearSession}>Clear session</Button>
-                  </div>
-                </form>
-              </CardContent>
-            </Card>
-          </div>
+          )}
         </TabsContent>
 
         <TabsContent value="logging">
