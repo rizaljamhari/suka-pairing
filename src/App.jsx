@@ -962,7 +962,7 @@ function PortalPage() {
                 <CardTitle>Pair a TV</CardTitle>
               </CardHeader>
               <CardContent>
-                <form className="space-y-5" onSubmit={handlePairSubmit}>
+                <form className="space-y-3" onSubmit={handlePairSubmit}>
                   <div>
                     <label className="label" htmlFor="pairing-code">TV pairing code</label>
                     <Input
@@ -982,7 +982,7 @@ function PortalPage() {
                     />
                   </div>
 
-                  <div className="relative flex py-2 items-center">
+                  <div className="relative flex py-0.5 items-center">
                     <div className="flex-grow border-t border-border/50"></div>
                     <span className="flex-shrink mx-4 text-[10px] font-bold text-muted-foreground tracking-widest uppercase">OR</span>
                     <div className="flex-grow border-t border-border/50"></div>
