@@ -988,14 +988,20 @@ function PortalPage() {
                     <div className="flex-grow border-t border-border/50"></div>
                   </div>
 
-                  <div className="rounded-[1.5rem] border border-dashed border-border bg-background/60 p-5">
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="font-semibold">Upload pairing QR</p>
-                      <Button disabled={jobBusy} type="button" variant="secondary" onClick={() => fileInputRef.current?.click()}>
-                        <QrCode className="h-4 w-4" />
-                        Choose image
-                      </Button>
-                    </div>
+                  <div>
+                    <label className="label">Upload QR</label>
+                    <Button
+                      disabled={jobBusy}
+                      type="button"
+                      variant="outline"
+                      className="w-full h-10 flex items-center justify-between px-3 font-normal text-muted-foreground border-dashed hover:bg-accent hover:text-accent-foreground"
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      <span className="flex items-center gap-2">
+                        <QrCode className="h-4 w-4 text-foreground/70" />
+                        Choose image...
+                      </span>
+                    </Button>
                     <input
                       ref={fileInputRef}
                       className="sr-only"
