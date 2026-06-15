@@ -1028,9 +1028,9 @@ function PortalPage() {
                     )}
                   </div>
 
-                  <div className="flex flex-wrap gap-3">
-                    <Button disabled={jobBusy} type="submit">{jobBusy ? 'Pairing...' : 'Start pairing'}</Button>
-                    <Button type="button" variant="outline" onClick={clearPairing}>Clear</Button>
+                  <div className="grid grid-cols-2 gap-3 pt-2">
+                    <Button disabled={jobBusy} type="submit" className="w-full">{jobBusy ? 'Pairing...' : 'Start pairing'}</Button>
+                    <Button type="button" variant="outline" onClick={clearPairing} className="w-full">Clear</Button>
                   </div>
                 </form>
               </CardContent>
@@ -1263,11 +1263,11 @@ function PortalPage() {
                         }, null, 2)}
                       />
                     </div>
-                    <div className="flex flex-wrap gap-3">
-                      <Button disabled={sessionBusy} type="submit">Save session</Button>
-                      <Button disabled={sessionBusy} type="button" variant="outline" onClick={verifySession}>Verify session</Button>
-                      <Button disabled={sessionBusy} type="button" variant="outline" onClick={refreshSessionToken}>Refresh token</Button>
-                      <Button disabled={sessionBusy} type="button" variant="ghost" onClick={clearSession}>Clear session</Button>
+                    <div className="grid grid-cols-2 gap-3 pt-2">
+                      <Button disabled={sessionBusy} type="submit" className="w-full">Save session</Button>
+                      <Button disabled={sessionBusy} type="button" variant="outline" onClick={verifySession} className="w-full">Verify session</Button>
+                      <Button disabled={sessionBusy} type="button" variant="outline" onClick={refreshSessionToken} className="w-full">Refresh token</Button>
+                      <Button disabled={sessionBusy} type="button" variant="ghost" onClick={clearSession} className="w-full">Clear session</Button>
                     </div>
                   </form>
                 </CardContent>
@@ -1293,7 +1293,7 @@ function PortalPage() {
                     <StatusItem label="Refresh token" value={session?.refreshTokenPreview || 'Missing'} />
                   </dl>
                   <div className="pt-2">
-                    <Button disabled={sessionBusy} type="button" variant="outline" onClick={verifySession}>Verify session</Button>
+                    <Button disabled={sessionBusy} type="button" variant="outline" onClick={verifySession} className="w-full">Verify session</Button>
                   </div>
                 </CardContent>
               </Card>
