@@ -1105,9 +1105,9 @@ function PortalPage() {
 
           <Card className="mt-6">
             <CardHeader>
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <CardTitle>History</CardTitle>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <Badge variant="neutral">{jobsSummary.total} total</Badge>
                   <Badge variant="ok">{jobsSummary.paired} paired</Badge>
                   {jobsSummary.failed > 0 && <Badge variant="danger">{jobsSummary.failed} failed</Badge>}
