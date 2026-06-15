@@ -982,9 +982,15 @@ function PortalPage() {
                     />
                   </div>
 
+                  <div className="relative flex py-2 items-center">
+                    <div className="flex-grow border-t border-border/50"></div>
+                    <span className="flex-shrink mx-4 text-[10px] font-bold text-muted-foreground tracking-widest uppercase">OR</span>
+                    <div className="flex-grow border-t border-border/50"></div>
+                  </div>
+
                   <div className="rounded-[1.5rem] border border-dashed border-border bg-background/60 p-5">
                     <div className="flex items-center justify-between gap-3">
-                      <p className="font-semibold">QR screenshot</p>
+                      <p className="font-semibold">Upload pairing QR</p>
                       <Button disabled={jobBusy} type="button" variant="secondary" onClick={() => fileInputRef.current?.click()}>
                         <QrCode className="h-4 w-4" />
                         Choose image
