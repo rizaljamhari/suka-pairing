@@ -668,42 +668,10 @@ function PortalPage() {
     }
   }
 
-  async function handleFile(file) {
-    if (!file) {
-      setScanStatus('error');
-      setScanMessage('No file selected.');
-      return;
-    }
+  async function executePairing(rawInput) {
+    const trimmedInput = rawInput.trim();
 
-    setScanStatus('loading');
-    setScanMessage(`Loading "${file.name}" (${(file.size / 1024).toFixed(1)} KB)...`);
-    setActivityLog(`Loading "${file.name}" (${(file.size / 1024).toFixed(1)} KB)...`);
-
-    try {
-      const decoded = await detectQrCode(file);
-      if (!decoded) {
-        setScanStatus('error');
-        setScanMessage(`Could not find a valid QR code in "${file.name}". Please make sure the screenshot is clear and uncropped.`);
-        setActivityLog(`Could not find a valid QR code in "${file.name}".\n\nPlease make sure the QR screenshot is clear and uncropped, or enter the 6-character TV code manually.`);
-        return;
-      }
-
-      setPairInput(decoded);
-      setScanStatus('success');
-      setScanMessage(`Successfully scanned QR code from "${file.name}"!`);
-      setActivityLog(`Successfully scanned QR code from "${file.name}".\n\nDecoded URL/Code:\n${decoded}`);
-    } catch (error) {
-      setScanStatus('error');
-      setScanMessage(`Error scanning image: ${error.message}`);
-      setActivityLog(`Error processing image "${file.name}":\n${error.message}`);
-    }
-  }
-
-  async function handlePairSubmit(event) {
-    event.preventDefault();
-    const rawInput = pairInput.trim();
-
-    if (!sanitizeDisplayCode(rawInput)) {
+    if (!sanitizeDisplayCode(trimmedInput)) {
       setActivityLog('Enter the TV pairing code or upload the QR screenshot first.');
       return;
     }
@@ -717,7 +685,7 @@ function PortalPage() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ rawInput }),
+        body: JSON.stringify({ rawInput: trimmedInput }),
       });
 
       setJob(payload);
@@ -741,6 +709,46 @@ function PortalPage() {
 
       setActivityLog(`Pairing failed: ${error.message}`);
     }
+  }
+
+  async function handleFile(file) {
+    if (jobBusy) return;
+    if (!file) {
+      setScanStatus('error');
+      setScanMessage('No file selected.');
+      return;
+    }
+
+    setScanStatus('loading');
+    setScanMessage(`Loading "${file.name}" (${(file.size / 1024).toFixed(1)} KB)...`);
+    setActivityLog(`Loading "${file.name}" (${(file.size / 1024).toFixed(1)} KB)...`);
+
+    try {
+      const decoded = await detectQrCode(file);
+      if (!decoded) {
+        setScanStatus('error');
+        setScanMessage(`Could not find a valid QR code in "${file.name}". Please make sure the screenshot is clear and uncropped.`);
+        setActivityLog(`Could not find a valid QR code in "${file.name}".\n\nPlease make sure the QR screenshot is clear and uncropped, or enter the 6-character TV code manually.`);
+        return;
+      }
+
+      const extractedCode = sanitizeDisplayCode(decoded) || decoded;
+      setPairInput(extractedCode);
+      setScanStatus('success');
+      setScanMessage(`Successfully scanned QR code from "${file.name}"!`);
+      setActivityLog(`Successfully scanned QR code from "${file.name}".\n\nDecoded Code: ${extractedCode}`);
+
+      await executePairing(extractedCode);
+    } catch (error) {
+      setScanStatus('error');
+      setScanMessage(`Error scanning image: ${error.message}`);
+      setActivityLog(`Error processing image "${file.name}":\n${error.message}`);
+    }
+  }
+
+  async function handlePairSubmit(event) {
+    if (event) event.preventDefault();
+    await executePairing(pairInput);
   }
 
   async function openJobFromHistory(jobId) {
@@ -962,7 +970,7 @@ function PortalPage() {
                   <div className="rounded-[1.5rem] border border-dashed border-border bg-background/60 p-5">
                     <div className="flex items-center justify-between gap-3">
                       <p className="font-semibold">QR screenshot</p>
-                      <Button type="button" variant="secondary" onClick={() => fileInputRef.current?.click()}>
+                      <Button disabled={jobBusy} type="button" variant="secondary" onClick={() => fileInputRef.current?.click()}>
                         <QrCode className="h-4 w-4" />
                         Choose image
                       </Button>
