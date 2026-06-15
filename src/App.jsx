@@ -964,7 +964,7 @@ function PortalPage() {
               <CardContent>
                 <form onSubmit={handlePairSubmit}>
                   <div>
-                    <label className="label" htmlFor="pairing-code">TV pairing code</label>
+                    <label className="label" htmlFor="pairing-code">Pairing code</label>
                     <Input
                       id="pairing-code"
                       placeholder="e.g. NXXMP2"
