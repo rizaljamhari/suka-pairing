@@ -950,14 +950,15 @@ function PortalPage() {
               <CardContent>
                 <form className="space-y-5" onSubmit={handlePairSubmit}>
                   <div>
-                    <label className="label" htmlFor="pairing-code">TV code or Sooka pairing link</label>
+                    <label className="label" htmlFor="pairing-code">TV pairing code</label>
                     <Input
                       id="pairing-code"
-                      rows={4}
-                      placeholder="NXXMP2 or https://sooka.my/pair-tv?code=NXXMP2"
+                      placeholder="e.g. NXXMP2"
                       value={pairInput}
                       onChange={(event) => {
-                        setPairInput(event.target.value);
+                        const val = event.target.value;
+                        const extracted = sanitizeDisplayCode(val);
+                        setPairInput(extracted || val);
                         if (scanStatus) {
                           setScanStatus(null);
                           setScanMessage('');
